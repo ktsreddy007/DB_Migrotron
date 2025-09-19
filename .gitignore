@@ -1,0 +1,57 @@
+# Ignore SQL Server backup files
+*.bak
+*.trn
+*.ldf
+*.mdf
+*.ndf
+
+# Ignore Visual Studio and SSDT build folders
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.cache
+*.pdb
+*.dbmdl
+*.vsp
+
+# Ignore temporary or auto-generated files
+*.tmp
+*.log
+*.sql~              # Temporary edits
+*.sql.rej           # Rejected patches
+*.sql.orig          # Merge conflicts
+
+# Ignore VS Code settings (if using VS Code for editing .sql)
+.vscode/
+
+# Ignore generated DACPAC and deployment artifacts
+*.dacpac
+*.bacpac
+*.publish.xml
+*.sqlproj.user
+*.publish.xml
+*.dbschema
+*.dbproj.schemaview
+*.jfm
+
+# Ignore SSMS auto recovery files
+*.auto.sql
+
+# Ignore environment-specific config files
+.env
+*.config.local
+
+# Ignore Git folder
+.git/
+
+# Ignore other common IDE files
+*.ncb
+*.sdf
+*.sln.docstates
+
+# Ignore test output or report files
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
