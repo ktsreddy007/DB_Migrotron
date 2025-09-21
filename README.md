@@ -13,8 +13,7 @@ DevOps Engineer | Cloud Enthusiast
 ---
 ## Below is the CICD Flow we follow for DB Migration E2E Deployment
 <p float="center">
-  <img src="flyway/images/Flyway(CICD).png" alt="flywaycicd" width="320" style="margin:10px;"/><br/>
-  <strong>Flyway CICD Flow</strong> This Pipeline for now deploy only SQL Server<br/><br/>
+  <img src="flyway/images/Flyway(CICD).png" alt="flywaycicd"/><br/>
 </p>
 
 ---
