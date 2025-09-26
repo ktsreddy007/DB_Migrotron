@@ -13,7 +13,7 @@ DevOps Engineer | Cloud Enthusiast
 ---
 ## Below is the CICD Flow we follow for DB Migration E2E Deployment
 <p float="center">
-  <img src="flyway/images/Flyway(CICD).png" alt="flywaycicd"/><br/>
+  <img src="Database/images/Flyway(CICD).png" alt="flywaycicd"/><br/>
 </p>
 
 ---
