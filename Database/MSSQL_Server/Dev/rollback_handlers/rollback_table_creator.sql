@@ -3,7 +3,7 @@ IF NOT EXISTS (
     WHERE TABLE_NAME = 'schema_rollback_history' AND TABLE_SCHEMA = 'dbo'
 )
 BEGIN
-    CREATE TABLE dbo.schema_rollback_history (
+    CREATE TABLE dbo.rollback_history (
         id INT IDENTITY(1,1) PRIMARY KEY,
         version VARCHAR(50),
         description VARCHAR(255),

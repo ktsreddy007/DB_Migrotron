@@ -1,6 +1,21 @@
+import os
+import openpyxl
 import pyodbc
+from dotenv import load_dotenv
 
-def apply_rollback_sql(server, database, username, password, sql_file_path):
+load_dotenv(dotenv_path=".env.dev") 
+
+
+def apply_rollback_sql(server, port, database, username, password, sql_file_path):
+    conn = None
+    cursor = None
+
+      # Correctly build the server string
+    if port and '\\' not in server:
+        server_str = f"{server},{port}"  # Use comma only if NOT a named instance
+    else:
+        server_str = server  # Named instance or no port
+        
     try:
         # Establish connection to the SQL Server database
         conn = pyodbc.connect(
@@ -27,23 +42,25 @@ def apply_rollback_sql(server, database, username, password, sql_file_path):
         
         # Commit the rollback transaction
         conn.commit()
-
         print("Rollback script applied successfully.")
 
     except Exception as e:
         print(f"An error occurred: {e}")
 
     finally:
-        cursor.close()
-        conn.close()
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
 
 if __name__ == "__main__":
     # Replace these parameters with your actual DB connection info and rollback file path
-    server = os.getenv('server')
-    database = os.getenv('database')
-    username = os.getenv('username')
-    password = os.getenv('password')
-    sql_file_path = os.getenv('sql_file_path')
+    server = os.getenv('DB_HOST')
+    port = os.getenv('DB_PORT') 
+    database = os.getenv('DB_NAME')
+    username = os.getenv('DB_USER')
+    password = os.getenv('DB_PASS')
+    sql_file_path = os.getenv('SQL_FILE_PATH') 
 
-    apply_rollback_sql(server, database, username, password, sql_file_path)
+    apply_rollback_sql(server, port, database, username, password, sql_file_path)
