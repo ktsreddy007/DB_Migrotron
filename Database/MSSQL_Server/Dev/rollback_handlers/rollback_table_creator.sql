@@ -1,9 +1,9 @@
 IF NOT EXISTS (
     SELECT * FROM INFORMATION_SCHEMA.TABLES
-    WHERE TABLE_NAME = 'schema_rollback_history' AND TABLE_SCHEMA = 'dbo'
+    WHERE TABLE_NAME = 'rollback_history' AND TABLE_SCHEMA = 'dbo'
 )
 BEGIN
-    CREATE TABLE dbo.rollback_history (
+    CREATE TABLE Payroll.dbo.rollback_history (
         id INT IDENTITY(1,1) PRIMARY KEY,
         version VARCHAR(50),
         description VARCHAR(255),
