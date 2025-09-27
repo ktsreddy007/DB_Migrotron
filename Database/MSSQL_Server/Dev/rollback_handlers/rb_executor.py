@@ -62,13 +62,6 @@ if __name__ == "__main__":
     database = os.getenv('DB_NAME')
     username = os.getenv('DB_USER')
     password = os.getenv('DB_PASS')
-    #sql_file_path = os.getenv('SQL_FILE_PATH') 
-    #server = "127.0.0.1"          # or "17SH9S2"
-    #port = "1433"
-    #database = "Payroll"
-    #sername = "Ktsreddy007"
-    #password = "Gold007@"
-
-    
+        
     sql_file_path = os.path.join(script_dir, '..', 'rollback_sql', 'rb_users_table.sql')
     apply_rollback_sql(server, port, database, username, password, sql_file_path)
