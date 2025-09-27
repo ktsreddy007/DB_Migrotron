@@ -3,8 +3,9 @@ import openpyxl
 import pyodbc
 from dotenv import load_dotenv
 
-load_dotenv(dotenv_path=".env.dev") 
-
+script_dir = os.path.dirname(os.path.abspath(__file__))
+env_path = os.path.join(script_dir, '..', '.env.dev')
+load_dotenv(dotenv_path=env_path)
 
 def apply_rollback_sql(server, port, database, username, password, sql_file_path):
     conn = None
@@ -20,7 +21,7 @@ def apply_rollback_sql(server, port, database, username, password, sql_file_path
         # Establish connection to the SQL Server database
         conn = pyodbc.connect(
             f'DRIVER={{ODBC Driver 17 for SQL Server}};'
-            f'SERVER={server};'
+            f'SERVER={server_str};'
             f'DATABASE={database};'
             f'UID={username};'
             f'PWD={password}'
@@ -61,6 +62,13 @@ if __name__ == "__main__":
     database = os.getenv('DB_NAME')
     username = os.getenv('DB_USER')
     password = os.getenv('DB_PASS')
-    sql_file_path = os.getenv('SQL_FILE_PATH') 
+    #sql_file_path = os.getenv('SQL_FILE_PATH') 
+    #server = "127.0.0.1"          # or "17SH9S2"
+    #port = "1433"
+    #database = "Payroll"
+    #sername = "Ktsreddy007"
+    #password = "Gold007@"
 
+    
+    sql_file_path = os.path.join(script_dir, '..', 'rollback_sql', 'rb_users_table.sql')
     apply_rollback_sql(server, port, database, username, password, sql_file_path)
