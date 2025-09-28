@@ -25,14 +25,18 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                $prTitle = "$(System.PullRequest.Title)"
+                Write-Host "Reading PR title from predefined variable..."
+                $prTitle = "${env:SYSTEM_PULLREQUEST_TITLE}"
+                if (-not $prTitle) {
+                    Write-Error "System.PullRequest.Title is not available. Make sure this pipeline is triggered by a PR."
+                exit 1
+                }
                 Write-Host "PR Title: $prTitle"
-
                 $words = $prTitle -split ' '
                 $rollbackScript = $words[-1]
                 Write-Host "Parsed rollback script name (last word): $rollbackScript"
+                Write-Host "##vso[task.setvariable variable=rollbackScriptName]$rollbackScript"
 
-                Write-Host "##vso[task.setvariable variable=rollbackScriptName]$rollbackScript" 
           # Insert rollback script name into MSSQL table
           - task: PowerShell@2
             displayName: 'Insert Rollback Script to migration_rollback_mapper'
