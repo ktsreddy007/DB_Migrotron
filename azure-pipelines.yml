@@ -6,30 +6,68 @@ pr:
 pool:
   name: Self-Hosted   # Your agent pool name
 
+
 stages:
-  - stage: ValidateMigration
-    displayName: 'Flyway Migration Validation (Windows Agent)'
+  - stage: ExtractInsertAndValidate
+    displayName: 'Parse PR, Insert Rollback Script & Validate Migration'
     jobs:
-      - job: EnsureTools
-        displayName: 'Ensure Java and Flyway Installed'
+      - job: ParseInsertAndValidateJob
+        displayName: 'Parse Rollback Script, Insert into DB, and Validate Flyway Migration'
         pool:
           name: Self-Hosted
           demands:
             - Agent.OS -equals Windows_NT
+
         steps:
-          - checkout: none
-# ✅ Check and Install Java (if not found)
+          # Parse rollback script name from PR title (last word)
+          - script: |
+              $prTitle = "$(System.PullRequest.Title)"
+              Write-Host "PR Title: $prTitle"
+              
+              $words = $prTitle -split ' '
+              $rollbackScript = $words[-1]
+              Write-Host "Parsed rollback script name (last word): $rollbackScript"
+              
+              Write-Host "##vso[task.setvariable variable=rollbackScriptName]$rollbackScript"
+            displayName: 'Parse Rollback Script from PR Title (Last Word)'
+
+          # Insert rollback script name into MSSQL table
+          - task: PowerShell@2
+            displayName: 'Insert Rollback Script to migration_rollback_mapper'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $rollbackScript = '$(rollbackScriptName)'
+                $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
+
+                $query = "INSERT INTO Payroll.dbo.migration_rollback_mapper (rollback_script_name) VALUES ('$rollbackScript')"
+
+                $connection = New-Object System.Data.SqlClient.SqlConnection
+                $connection.ConnectionString = $connectionString
+                $connection.Open()
+
+                $command = $connection.CreateCommand()
+                $command.CommandText = $query
+                $command.ExecuteNonQuery()
+
+                $connection.Close()
+            env:
+              dbUser: $(dbUser)
+              dbPassword: $(dbPassword)
+
+            # Ensure Java installed
           - task: PowerShell@2
             displayName: 'Check and Install Java (via command only)'
             inputs:
-               targetType: 'inline'
-               script: |
-                  if (Get-Command java -ErrorAction SilentlyContinue) {
-                    Write-Host "Java is already installed."
-                      } else {
-                        Write-Host "Java is NOT installed. Installing OpenJDK 11..."
-                      choco install -y openjdk11
-                    }
+              targetType: 'inline'
+              script: |
+                if (Get-Command java -ErrorAction SilentlyContinue) {
+                  Write-Host "Java is already installed."
+                } else {
+                  Write-Host "Java is NOT installed. Installing OpenJDK 11..."
+                  choco install -y openjdk11
+                }
+          # Ensure Flyway CLI installed
           - task: PowerShell@2
             displayName: 'Check and Install Flyway CLI (any version)'
             inputs:
