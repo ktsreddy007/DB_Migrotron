@@ -89,3 +89,42 @@ stages:
                     $env:Path = "$flywayPath;$env:Path"
                     Write-Host "Flyway CLI installed successfully."
                   }
+          - task: PowerShell@2
+            displayName: 'Conditional Flyway Validate (skip on fresh DB)'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
+                $connection = New-Object System.Data.SqlClient.SqlConnection
+                $connection.ConnectionString = $connectionString
+                $connection.Open()
+                $query = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'flyway_schema_history'"
+                $command = $connection.CreateCommand()
+                $command.CommandText = $query
+                $tableExists = $command.ExecuteScalar()
+                $connection.Close()
+                $flywayConfigPath = "$(Build.SourcesDirectory)\Database\MSSQL_Server\Dev\conf\flyway-dev.conf"
+                Write-Host "Using Flyway config file at path: $flywayConfigPath"
+                if ($tableExists -gt 0) {
+                        Write-Host "flyway_schema_history table found. Proceeding with flyway validate."
+                        $validateArgs = "validate -configFiles=""$flywayConfigPath"""
+                        $validateProcess = Start-Process -FilePath flyway -ArgumentList $validateArgs -NoNewWindow -PassThru -Wait
+                        if ($validateProcess.ExitCode -ne 0) {
+                              Write-Error "Flyway validate failed."
+                              exit 1
+                        }
+                }
+                else {
+                    Write-Host "flyway_schema_history table NOT found. Skipping flyway validate for fresh DB."
+                }          
+            # Flyway info dry run to show migration status
+          - task: PowerShell@2
+            displayName: 'Flyway Info (Dry Run)'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $infoProcess = Start-Process -FilePath flyway -ArgumentList "info -configFiles=flyway.conf" -NoNewWindow -PassThru -Wait
+                if ($infoProcess.ExitCode -ne 0) {
+                  Write-Error "Flyway info command failed."
+                  exit 1
+                }          
