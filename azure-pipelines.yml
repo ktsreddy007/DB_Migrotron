@@ -25,11 +25,17 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "Reading branch name from predefined variable..."
-                $branchName = "${env:BUILD_SOURCEBRANCHNAME}"
-                Write-Host "Full branch name: $branchName"
+                Write-Host "Reading source branch from PR variable..."
+                $branchRef = "${env:SYSTEM_PULLREQUEST_SOURCEBRANCH}"
+                Write-Host "Branch ref: $branchRef"
+                if (-not $branchRef) {
+                    Write-Error "SYSTEM_PULLREQUEST_SOURCEBRANCH is not available. Are you triggering from a PR?"
+                  exit 1
+                }
+                $branchName = $branchRef -replace '^refs/heads/', ''
+                Write-Host "Branch name: $branchName"
                 if ($branchName -notmatch '^rollback/.+\.sql$') {
-                    Write-Error "Invalid branch name format. Expected: rollback/<rollback_script.sql>"
+                        Write-Error "Invalid branch name format. Expected: rollback/<rollback_script.sql>"
                     exit 1
                 }
                 $rollbackScript = $branchName.Split('/')[-1]
