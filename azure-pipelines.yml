@@ -1,11 +1,12 @@
 trigger: none
+
 pr:
   branches:
     include:
       - main
+
 pool:
   name: Self-Hosted   # Your agent pool name
-
 
 stages:
   - stage: ExtractInsertAndValidate
@@ -19,25 +20,22 @@ stages:
             - Agent.OS -equals Windows_NT
 
         steps:
-          # ✅ Parse rollback script name from PR title
           - task: PowerShell@2
-            displayName: 'Parse Rollback Script from PR Title (Last Word)'
+            displayName: 'Parse Rollback Script from Branch Name'
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "Reading PR title from predefined variable..."
-                $prTitle = "${env:SYSTEM_PULLREQUEST_TITLE}"
-                if (-not $prTitle) {
-                    Write-Error "System.PullRequest.Title is not available. Make sure this pipeline is triggered by a PR."
-                exit 1
+                Write-Host "Reading branch name from predefined variable..."
+                $branchName = "${env:BUILD_SOURCEBRANCHNAME}"
+                Write-Host "Full branch name: $branchName"
+                if ($branchName -notmatch '^rollback/.+\.sql$') {
+                    Write-Error "Invalid branch name format. Expected: rollback/<rollback_script.sql>"
+                    exit 1
                 }
-                Write-Host "PR Title: $prTitle"
-                $words = $prTitle -split ' '
-                $rollbackScript = $words[-1]
-                Write-Host "Parsed rollback script name (last word): $rollbackScript"
+                $rollbackScript = $branchName.Split('/')[-1]
+                Write-Host "Extracted rollback script name: $rollbackScript"
                 Write-Host "##vso[task.setvariable variable=rollbackScriptName]$rollbackScript"
 
-          # Insert rollback script name into MSSQL table
           - task: PowerShell@2
             displayName: 'Insert Rollback Script to migration_rollback_mapper'
             inputs:
@@ -45,23 +43,18 @@ stages:
               script: |
                 $rollbackScript = '$(rollbackScriptName)'
                 $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
-
                 $query = "INSERT INTO Payroll.dbo.migration_rollback_mapper (rollback_script_name) VALUES ('$rollbackScript')"
-
                 $connection = New-Object System.Data.SqlClient.SqlConnection
                 $connection.ConnectionString = $connectionString
                 $connection.Open()
-
                 $command = $connection.CreateCommand()
                 $command.CommandText = $query
                 $command.ExecuteNonQuery()
-
                 $connection.Close()
             env:
               dbUser: $(dbUser)
               dbPassword: $(dbPassword)
 
-            # Ensure Java installed
           - task: PowerShell@2
             displayName: 'Check and Install Java (via command only)'
             inputs:
@@ -73,20 +66,19 @@ stages:
                   Write-Host "Java is NOT installed. Installing OpenJDK 11..."
                   choco install -y openjdk11
                 }
-          # Ensure Flyway CLI installed
+
           - task: PowerShell@2
             displayName: 'Check and Install Flyway CLI (any version)'
             inputs:
-                targetType: 'inline'
-                script: |
-                 if (Get-Command flyway -ErrorAction SilentlyContinue) {
-                          Write-Host "Flyway CLI is already installed."
-                  } else {
-                    Write-Host "Flyway CLI is NOT installed. Installing..."
-                    $flywayZip = "$(Build.SourcesDirectory)\flyway.zip"
-                    Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/9.8.1/flyway-commandline-9.8.1-windows-x64.zip" -OutFile $flywayZip
-                    Expand-Archive -Path $flywayZip -DestinationPath "$(Build.SourcesDirectory)\flyway"
-                    $flywayPath = "$(Build.SourcesDirectory)\flyway\flyway-9.8.1"
-                    $env:Path = "$flywayPath;$env:Path"
-                    Write-Host "Flyway CLI installed successfully."
-                  }
+              targetType: 'inline'
+              script: |
+                if (Get-Command flyway -ErrorAction SilentlyContinue) {
+                  Write-Host "Flyway CLI is already installed."
+                } else {
+                  Write-Host "Flyway CLI is NOT installed. Installing..."
+                  $flywayZip = "$(Build.SourcesDirectory)\flyway.zip"
+                  Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/9.8.1/flyway-commandline-9.8.1-windows-x64.zip" -OutFile $flywayZip
+                  Expand-Archive -Path $flywayZip -DestinationPath "$(Build.SourcesDirectory)\flyway"
+                  $flywayPath = "$(Build.SourcesDirectory)\flyway\flyway-9.8.1"
+                  $env:Path = "$flywayPath;$env:Path"
+                  Write-Host "Flyway CLI installed successfully."
