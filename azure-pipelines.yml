@@ -13,7 +13,7 @@ stages:
       - job: EnsureTools
         displayName: 'Ensure Java and Flyway Installed'
         pool:
-          name: Self-hosted
+          name: Self-Hosted
           demands:
             - Agent.OS -equals Windows_NT
         steps:
@@ -27,44 +27,44 @@ stages:
                   Write-Host "Checking for Java installation via command..."
                   $javaCmd = Get-Command java -ErrorAction SilentlyContinue
                   if ($javaCmd) {
-                    & java -version > $null 2>&1
-                      if ($LASTEXITCODE -eq 0) {
-                          Write-Host "✅ Java is installed and working."
-                        } else {
-                           Write-Host "❌ Java command found but failed. Installing OpenJDK 11..."
-                           choco install -y openjdk11
-                          }
-                        } else {
-                             Write-Host "❌ Java command not found. Installing OpenJDK 11..."
-                             choco install -y openjdk11
-                  }
+                    try {
+                        & java -version > $null 2>&1
+                        Write-Host "✅ Java is installed and working."
+                      } catch {
+                          Write-Host "❌ Java command found but failed. Installing OpenJDK 11..."
+                          choco install -y openjdk11
+                        }
+                      } else {
+                        Write-Host "❌ Java command not found. Installing OpenJDK 11..."
+                        choco install -y openjdk11
+                    }
           - task: PowerShell@2
             displayName: 'Check and Install Flyway CLI (any version)'
             inputs:
-              targetType: 'inline'
-              script: |
-                Write-Host "Checking for Flyway CLI via command..."
-                $flywayCmd = Get-Command flyway -ErrorAction SilentlyContinue
-                $needInstall = $false
-                if ($flywayCmd) {
-                  Write-Host "Flyway command found at: $($flywayCmd.Path)"
-                  & flyway -v > $null 2>&1
-                  if ($LASTEXITCODE -ne 0) {
-                      Write-Host "❌ Flyway command found but failed."
-                      $needInstall = $true
-                  } else {
-                      Write-Host "✅ Flyway CLI is installed and working."
-                    }
-                } else {
-                Write-Host "❌ Flyway command not found."
-                $needInstall = $true 
-                }
-                if ($needInstall) {
-                  Write-Host "Installing Flyway CLI..."
-                  $flywayZip = "$(Build.SourcesDirectory)\flyway.zip"
-                  Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/9.8.1/flyway-commandline-9.8.1-windows-x64.zip" -OutFile $flywayZip
-                  Expand-Archive -Path $flywayZip -DestinationPath "$(Build.SourcesDirectory)\flyway"
-                  $flywayPath = "$(Build.SourcesDirectory)\flyway\flyway-9.8.1"
-                  $env:Path = "$flywayPath;$env:Path"
-                  Write-Host "✅ Flyway CLI installed successfully."
-                }
+                targetType: 'inline'
+                script: |
+                  Write-Host "Checking for Flyway CLI via command..."
+                  $flywayCmd = Get-Command flyway -ErrorAction SilentlyContinue
+                  $needInstall = $false
+                  if ($flywayCmd) {
+                    Write-Host "Flyway command found at: $($flywayCmd.Path)"
+                      try {
+                          & flyway -v > $null 2>&1
+                          Write-Host "✅ Flyway CLI is installed and working."
+                        } catch {
+                            Write-Host "❌ Flyway command found but failed."
+                            $needInstall = $true
+                          }
+                    } else {
+                    Write-Host "❌ Flyway command not found."
+                    $needInstall = $true
+                  }
+                  if ($needInstall) {
+                    Write-Host "Installing Flyway CLI..."
+                    $flywayZip = "$(Build.SourcesDirectory)\flyway.zip"
+                    Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/9.8.1/flyway-commandline-9.8.1-windows-x64.zip" -OutFile $flywayZip
+                    Expand-Archive -Path $flywayZip -DestinationPath "$(Build.SourcesDirectory)\flyway"
+                    $flywayPath = "$(Build.SourcesDirectory)\flyway\flyway-9.8.1"
+                    $env:Path = "$flywayPath;$env:Path"
+                    Write-Host "✅ Flyway CLI installed successfully."
+                  }
