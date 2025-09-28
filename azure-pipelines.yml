@@ -13,7 +13,7 @@ stages:
       - job: EnsureTools
         displayName: 'Ensure Java and Flyway Installed'
         pool:
-          name: Self-hosted
+          name: Self-Hosted
           demands:
             - Agent.OS -equals Windows_NT
         steps:
