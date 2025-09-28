@@ -33,7 +33,6 @@ stages:
                 Write-Host "Parsed rollback script name (last word): $rollbackScript"
 
                 Write-Host "##vso[task.setvariable variable=rollbackScriptName]$rollbackScript" 
-
           # Insert rollback script name into MSSQL table
           - task: PowerShell@2
             displayName: 'Insert Rollback Script to migration_rollback_mapper'
