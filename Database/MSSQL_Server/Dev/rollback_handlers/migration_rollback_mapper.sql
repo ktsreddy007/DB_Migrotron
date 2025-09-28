@@ -4,6 +4,7 @@ IF NOT EXISTS (
 )
 BEGIN
 CREATE TABLE Payroll.dbo.migration_rollback_mapper (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
     migration_version VARCHAR(50),               -- Initially empty, to be filled after migration
     migration_script VARCHAR(1000),               -- Initially empty, to be filled after migration
     rollback_script_name VARCHAR(1000),           -- Rollback script file name, provided by developer during PR
@@ -12,4 +13,3 @@ CREATE TABLE Payroll.dbo.migration_rollback_mapper (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP  -- Timestamp when the mapping was created
 );
 END;
-

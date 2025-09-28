@@ -81,10 +81,11 @@ stages:
                 if (Get-Command flyway -ErrorAction SilentlyContinue) {
                   Write-Host "Flyway CLI is already installed."
                 } else {
-                  Write-Host "Flyway CLI is NOT installed. Installing..."
-                  $flywayZip = "$(Build.SourcesDirectory)\flyway.zip"
-                  Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/9.8.1/flyway-commandline-9.8.1-windows-x64.zip" -OutFile $flywayZip
-                  Expand-Archive -Path $flywayZip -DestinationPath "$(Build.SourcesDirectory)\flyway"
-                  $flywayPath = "$(Build.SourcesDirectory)\flyway\flyway-9.8.1"
-                  $env:Path = "$flywayPath;$env:Path"
-                  Write-Host "Flyway CLI installed successfully."
+                    Write-Host "Flyway CLI is NOT installed. Installing..."
+                    $flywayZip = "$(Build.SourcesDirectory)\flyway.zip"
+                    Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/9.8.1/flyway-commandline-9.8.1-windows-x64.zip" -OutFile $flywayZip
+                    Expand-Archive -Path $flywayZip -DestinationPath "$(Build.SourcesDirectory)\flyway"
+                    $flywayPath = "$(Build.SourcesDirectory)\flyway\flyway-9.8.1"
+                    $env:Path = "$flywayPath;$env:Path"
+                    Write-Host "Flyway CLI installed successfully."
+                  }
