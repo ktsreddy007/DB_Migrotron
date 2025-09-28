@@ -5,7 +5,7 @@ pr:
       - main
   paths:
     include:
-      - Database/MSSQL_Server/MSSQL_Server/Dev/**
+      - Database/MSSQL_Server/MSSQL_Server/Dev/
 pool:
   name: Self-hosted   # Your agent pool name
 
