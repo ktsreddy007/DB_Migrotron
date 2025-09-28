@@ -115,7 +115,7 @@ stages:
                         }
                 }
                 else {
-                    Write-Host "flyway_schema_history table NOT found. Skipping flyway validate for fresh DB."
+                    Write-Host "flyway_schema_history table NOT found. Skiping flyway validate for fresh DB."
                 }          
             # Flyway info dry run to show migration status
           - task: PowerShell@2
