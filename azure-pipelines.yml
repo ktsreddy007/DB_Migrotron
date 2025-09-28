@@ -19,18 +19,20 @@ stages:
             - Agent.OS -equals Windows_NT
 
         steps:
-          # Parse rollback script name from PR title (last word)
-          - script: |
-              $prTitle = "$(System.PullRequest.Title)"
-              Write-Host "PR Title: $prTitle"
-              
-              $words = $prTitle -split ' '
-              $rollbackScript = $words[-1]
-              Write-Host "Parsed rollback script name (last word): $rollbackScript"
-              
-              Write-Host "##vso[task.setvariable variable=rollbackScriptName]$rollbackScript"
+          # ✅ Parse rollback script name from PR title
+          - task: PowerShell@2
             displayName: 'Parse Rollback Script from PR Title (Last Word)'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $prTitle = "$(System.PullRequest.Title)"
+                Write-Host "PR Title: $prTitle"
 
+                $words = $prTitle -split ' '
+                $rollbackScript = $words[-1]
+                Write-Host "Parsed rollback script name (last word): $rollbackScript"
+
+                Write-Host "##vso[task.setvariable variable=rollbackScriptName]$rollbackScript" 
           # Insert rollback script name into MSSQL table
           - task: PowerShell@2
             displayName: 'Insert Rollback Script to migration_rollback_mapper'
