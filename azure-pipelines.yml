@@ -18,45 +18,53 @@ stages:
             - Agent.OS -equals Windows_NT
         steps:
           - checkout: none
-
-           # ✅ Check and Install Java (if not found)
+# ✅ Check and Install Java (if not found)
           - task: PowerShell@2
-            displayName: 'Check and Install Java (any version)'
+            displayName: 'Check and Install Java (via command only)'
             inputs:
-              targetType: 'inline'
-              script: |
-                Write-Host "Checking Java installation..."
-                try {
-                  & java -version > $null 2>&1
-                  if ($LASTEXITCODE -eq 0) {
-                    Write-Host "✅ Java is already installed."
-                  } else {
-                    throw "Java not found."
+               targetType: 'inline'
+               script: |
+                  Write-Host "Checking for Java installation via command..."
+                  $javaCmd = Get-Command java -ErrorAction SilentlyContinue
+                  if ($javaCmd) {
+                    & java -version > $null 2>&1
+                      if ($LASTEXITCODE -eq 0) {
+                          Write-Host "✅ Java is installed and working."
+                        } else {
+                           Write-Host "❌ Java command found but failed. Installing OpenJDK 11..."
+                           choco install -y openjdk11
+                          }
+                        } else {
+                             Write-Host "❌ Java command not found. Installing OpenJDK 11..."
+                             choco install -y openjdk11
                   }
-                } catch {
-                  Write-Host "❌ Java not found. Installing OpenJDK 11..."
-                  choco install -y openjdk11
-                }
-
-          # ✅ Check and Install Flyway CLI (if not found)
           - task: PowerShell@2
             displayName: 'Check and Install Flyway CLI (any version)'
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "Checking Flyway CLI..."
-                try {
+                Write-Host "Checking for Flyway CLI via command..."
+                $flywayCmd = Get-Command flyway -ErrorAction SilentlyContinue
+                $needInstall = $false
+                if ($flywayCmd) {
+                  Write-Host "Flyway command found at: $($flywayCmd.Path)"
                   & flyway -v > $null 2>&1
-                  if ($LASTEXITCODE -eq 0) {
-                    Write-Host "✅ Flyway CLI is already installed."
+                  if ($LASTEXITCODE -ne 0) {
+                      Write-Host "❌ Flyway command found but failed."
+                      $needInstall = $true
                   } else {
-                    throw "Flyway not found."
-                  }
-                } catch {
-                  Write-Host "❌ Flyway not found. Installing Flyway CLI..."
+                      Write-Host "✅ Flyway CLI is installed and working."
+                    }
+                } else {
+                Write-Host "❌ Flyway command not found."
+                $needInstall = $true 
+                }
+                if ($needInstall) {
+                  Write-Host "Installing Flyway CLI..."
                   $flywayZip = "$(Build.SourcesDirectory)\flyway.zip"
                   Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/9.8.1/flyway-commandline-9.8.1-windows-x64.zip" -OutFile $flywayZip
                   Expand-Archive -Path $flywayZip -DestinationPath "$(Build.SourcesDirectory)\flyway"
                   $flywayPath = "$(Build.SourcesDirectory)\flyway\flyway-9.8.1"
                   $env:Path = "$flywayPath;$env:Path"
+                  Write-Host "✅ Flyway CLI installed successfully."
                 }
