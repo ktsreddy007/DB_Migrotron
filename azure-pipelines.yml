@@ -1,16 +1,79 @@
-trigger:
+trigger: none
+pr:
   branches:
     include:
-      - main           # Or your default branch name
+      - main      
   paths:
     include:
       - Database/MSSQL_Server/Dev/**
-
 pool:
   name: Self-hosted   # Your agent pool name
 
-steps:
-- script: |
-    echo "Running pipeline on Dev folder changes only"
-    echo "Agent name: $(Agent.Name)"
-  displayName: 'Test script step'
+stages:
+  - stage: ValidateMigration
+    displayName: 'Flyway Migration Validation (Windows Agent)'
+    jobs:
+      - job: EnsureTools
+        displayName: 'Ensure Java and Flyway Installed'
+        pool:
+          name: Default  # Your self-hosted agent pool
+          demands:
+            - Agent.OS -equals Windows_NT
+        strategy:
+          parallel: 2
+        steps:
+          - checkout: none
+
+          # ✅ Check/Install Java
+          - task: PowerShell@2
+            displayName: 'Check and Install Java (any version)'
+            condition: succeeded()
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Checking Java installation..."
+                try {
+                  & java -version > $null 2>&1
+                  if ($LASTEXITCODE -eq 0) {
+                    Write-Host "✅ Java is already installed."
+                  } else {
+                    throw "Java not found."
+                  }
+                } catch {
+                  Write-Host "❌ Java not found. Installing OpenJDK 11..."
+                  choco install -y openjdk11
+                }
+
+          # ✅ Check/Install Flyway CLI
+          - task: PowerShell@2
+            displayName: 'Check and Install Flyway CLI (any version)'
+            condition: succeeded()
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Checking Flyway CLI..."
+                try {
+                  & flyway -v > $null 2>&1
+                  if ($LASTEXITCODE -eq 0) {
+                    Write-Host "✅ Flyway is already installed."
+                  } else {
+                    throw "Flyway not found."
+                  }
+                } catch {
+                  Write-Host "❌ Flyway not found. Installing Flyway CLI..."
+                  $flywayZip = "$(Build.SourcesDirectory)\flyway.zip"
+                  Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/9.8.1/flyway-commandline-9.8.1-windows-x64.zip" -OutFile $flywayZip
+                  Expand-Archive -Path $flywayZip -DestinationPath "$(Build.SourcesDirectory)\flyway"
+                  $flywayPath = "$(Build.SourcesDirectory)\flyway\flyway-9.8.1"
+                  $env:Path = "$flywayPath;$env:Path"
+                }
+
+      - job: ValidateSQLScripts
+        displayName: 'Validate SQL Scripts with Flyway'
+        dependsOn: EnsureTools
+        pool:
+          name: Default
+          demands:
+            - Agent.OS -equals Windows_NT
+        steps:
+          - checkout: self
