@@ -18,7 +18,7 @@ stages:
           demands:
             - Agent.OS -equals Windows_NT
 
-          steps:
+        steps:
           # Parse rollback script name from PR title (last word)
           - script: |
               $prTitle = "$(System.PullRequest.Title)"
