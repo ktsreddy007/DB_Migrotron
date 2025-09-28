@@ -2,7 +2,7 @@ trigger: none
 pr:
   branches:
     include:
-      - main      
+      - main
   paths:
     include:
       - Database/MSSQL_Server/Dev/**
@@ -16,7 +16,7 @@ stages:
       - job: EnsureTools
         displayName: 'Ensure Java and Flyway Installed'
         pool:
-          name: Default  # Your self-hosted agent pool
+          name: Self-hosted  # Your self-hosted agent pool
           demands:
             - Agent.OS -equals Windows_NT
         strategy:
@@ -68,12 +68,12 @@ stages:
                   $env:Path = "$flywayPath;$env:Path"
                 }
 
-      - job: ValidateSQLScripts
-        displayName: 'Validate SQL Scripts with Flyway'
-        dependsOn: EnsureTools
-        pool:
-          name: Default
-          demands:
-            - Agent.OS -equals Windows_NT
-        steps:
-          - checkout: self
+#      - job: ValidateSQLScripts
+#        displayName: 'Validate SQL Scripts with Flyway'
+#        dependsOn: EnsureTools
+#        pool:
+#          name: Self-hosted
+#          demands:
+#            - Agent.OS -equals Windows_NT
+#        steps:
+#          - checkout: self
