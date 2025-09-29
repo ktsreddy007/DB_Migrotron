@@ -48,8 +48,10 @@ stages:
               targetType: 'inline'
               script: |
                 $rollbackScript = '$(rollbackScriptName)'
+                $repoFolder = 'rollback_sql'
+                $repoUrl = 'https://github.com/ktsreddy007/DB_Migrotron'
                 $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
-                $query = "INSERT INTO Payroll.dbo.migration_rollback_mapper (rollback_script_name) VALUES ('$rollbackScript')"
+                $query = "INSERT INTO Payroll.dbo.migration_rollback_mapper (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url) VALUES ('$rollbackScript', '$repoFolder', '$repoUrl')"
                 $connection = New-Object System.Data.SqlClient.SqlConnection
                 $connection.ConnectionString = $connectionString
                 $connection.Open()
