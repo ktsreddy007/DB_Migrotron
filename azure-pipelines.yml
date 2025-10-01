@@ -19,6 +19,12 @@ stages:
           inputs:
             targetType: 'inline'
             script: |
+              if (-not $env:SYSTEM_ACCESSTOKEN) {
+                    Write-Error "❌ ERROR: System.AccessToken is not available. Did you enable OAuth access in the pipeline settings?"
+                  exit 1
+                } else {
+                    Write-Host "✅ System.AccessToken is available!"
+              }
               $collectionUri = "$(System.CollectionUri)"
               $project = "$(System.TeamProject)"
               $repoId = "$(Build.Repository.ID)"
