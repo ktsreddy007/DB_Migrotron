@@ -9,124 +9,66 @@ pool:
   name: Self-Hosted   # Your aget pool name
 
 stages:
-  - stage: ExtractInsertAndValidate
-    displayName: 'Parse PR, Insert Rollback Script & Validate Migration'
+  - stage: CaptureRollbackScripts
+    displayName: 'Capture Rollback Scripts and Insert into Mapper Table'
     jobs:
-      - job: ParseInsertAndValidateJob
-        displayName: 'Parse Rollback Script, Insert into DB, and Validate Flyway Migration'
-        pool:
-          name: Self-Hosted
-          demands:
-            - Agent.OS -equals Windows_NT
-
-        steps:
-          - task: PowerShell@2
-            displayName: 'Parse Rollback Script from Branch Name'
-            inputs:
-              targetType: 'inline'
-              script: |
-                Write-Host "Reading source branch from PR variable..."
-                $branchRef = "${env:SYSTEM_PULLREQUEST_SOURCEBRANCH}"
-                Write-Host "Branch ref: $branchRef"
-                if (-not $branchRef) {
-                    Write-Error "SYSTEM_PULLREQUEST_SOURCEBRANCH is not available. Are you triggering from a PR?"
-                  exit 1
+    - job: InsertRollbackScripts
+      steps:
+        - task: PowerShell@2
+          displayName: 'Insert rollback script names into DB'
+          inputs:
+            targetType: 'inline'
+            script: |
+              $collectionUri = "$(System.CollectionUri)"
+              $project = "$(System.TeamProject)"
+              $repoId = "$(Build.Repository.ID)"
+              $prId = "$(System.PullRequest.PullRequestId)"
+              $buildId = "$(Build.BuildId)"
+              $token = "$(System.AccessToken)"
+              $repoUrl = 'https://github.com/ktsreddy007/DB_Migrotron'
+              $repoFolder = 'rollback_sql'
+              if (-not $prId) {
+                Write-Error "No PR ID detected. Exiting."
+                exit 1
+              }
+              $headers = @{ Authorization = "Bearer $token" }
+              $iterationsUri = "$collectionUri$project/_apis/git/repositories/$repoId/pullRequests/$prId/iterations?api-version=7.0"
+              $iterations = Invoke-RestMethod -Uri $iterationsUri -Headers $headers -Method Get
+              $latestIteration = ($iterations.value | Sort-Object -Property id -Descending)[0].id
+              $changesUri = "$collectionUri$project/_apis/git/repositories/$repoId/pullRequests/$prId/iterations/$latestIteration/changes?api-version=7.0"
+              $changes = Invoke-RestMethod -Uri $changesUri -Headers $headers -Method Get
+              $rollbackScripts = @()
+              foreach ($change in $changes.value) {
+                $filePath = $change.item.path
+                if ($filePath -like "*/rollback_sql/*.sql") {
+                  $filename = [System.IO.Path]::GetFileName($filePath)
+                  $rollbackScripts += $filename
+                  Write-Host "Detected rollback script: $filename"
                 }
-                $branchName = $branchRef -replace '^refs/heads/', ''
-                Write-Host "Branch name: $branchName"
-                if ($branchName -notmatch '^rollback/.+\.sql$') {
-                        Write-Error "Invalid branch name format. Expected: rollback/<rollback_script.sql>"
-                    exit 1
-                }
-                $rollbackScript = $branchName.Split('/')[-1]
-                Write-Host "Extracted rollback script name: $rollbackScript"
-                Write-Host "##vso[task.setvariable variable=rollbackScriptName]$rollbackScript"
-
-          - task: PowerShell@2
-            displayName: 'Insert Rollback Script to migration_rollback_mapper'
-            inputs:
-              targetType: 'inline'
-              script: |
-                $rollbackScript = '$(rollbackScriptName)'
-                $repoFolder = 'rollback_sql'
-                $repoUrl = 'https://github.com/ktsreddy007/DB_Migrotron'
-                $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
-                $query = "INSERT INTO Payroll.dbo.migration_rollback_mapper (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url) VALUES ('$rollbackScript', '$repoFolder', '$repoUrl')"
-                $connection = New-Object System.Data.SqlClient.SqlConnection
-                $connection.ConnectionString = $connectionString
-                $connection.Open()
+              }
+              if ($rollbackScripts.Count -eq 0) {
+                Write-Host "No rollback scripts detected. Exiting."
+                exit 0
+              }
+              $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
+              $connection = New-Object System.Data.SqlClient.SqlConnection
+              $connection.ConnectionString = $connectionString
+              $connection.Open()
+              foreach ($script in $rollbackScripts) {
+                $query = @"
+                        INSERT INTO migration_rollback_mapper 
+                        (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url, build_id, pr_id)
+                        VALUES 
+                        ('$script', '$repoFolder', '$repoUrl', '$buildId', '$prId')
+                        "@
                 $command = $connection.CreateCommand()
                 $command.CommandText = $query
                 $command.ExecuteNonQuery()
-                $connection.Close()
-            env:
-              dbUser: $(dbUser)
-              dbPassword: $(dbPassword)
-
-          - task: PowerShell@2
-            displayName: 'Check and Install Java (via command only)'
-            inputs:
-              targetType: 'inline'
-              script: |
-                if (Get-Command java -ErrorAction SilentlyContinue) {
-                  Write-Host "Java is already installed."
-                } else {
-                  Write-Host "Java is NOT installed. Installing OpenJDK 11..."
-                  choco install -y openjdk11
-                }
-
-          - task: PowerShell@2
-            displayName: 'Check and Install Flyway CLI (any version)'
-            inputs:
-              targetType: 'inline'
-              script: |
-                if (Get-Command flyway -ErrorAction SilentlyContinue) {
-                  Write-Host "Flyway CLI is already installed."
-                } else {
-                    Write-Host "Flyway CLI is NOT installed. Installing..."
-                    $flywayZip = "$(Build.SourcesDirectory)\flyway.zip"
-                    Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/9.8.1/flyway-commandline-9.8.1-windows-x64.zip" -OutFile $flywayZip
-                    Expand-Archive -Path $flywayZip -DestinationPath "$(Build.SourcesDirectory)\flyway"
-                    $flywayPath = "$(Build.SourcesDirectory)\flyway\flyway-9.8.1"
-                    $env:Path = "$flywayPath;$env:Path"
-                    Write-Host "Flyway CLI installed successfully."
-                  }
-          - task: PowerShell@2
-            displayName: 'Conditional Flyway Validate (skip on fresh DB)'
-            inputs:
-              targetType: 'inline'
-              script: |
-                $connectionString = "Server=localhost;Database=Payroll;User Id=Ktsreddy007;Password=Gold007@;"
-                $connection = New-Object System.Data.SqlClient.SqlConnection
-                $connection.ConnectionString = $connectionString
-                $connection.Open()
-                $query = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'flyway_schema_history'"
-                $command = $connection.CreateCommand()
-                $command.CommandText = $query
-                $tableExists = $command.ExecuteScalar()
-                $connection.Close()
-                $flywayConfigPath = "$(Build.SourcesDirectory)\Database\MSSQL_Server\Dev\conf\flyway-dev.conf"
-                Write-Host "Using Flyway config file at path: $flywayConfigPath"
-                if ($tableExists -gt 0) {
-                        Write-Host "flyway_schema_history table found. Proceeding with flyway validate."
-                        $validateArgs = "validate -configFiles=""$flywayConfigPath"""
-                        $validateProcess = Start-Process -FilePath flyway -ArgumentList $validateArgs -NoNewWindow -PassThru -Wait
-                        if ($validateProcess.ExitCode -ne 0) {
-                              Write-Error "Flyway validate failed."
-                              exit 1
-                        }
-                }
-                else {
-                    Write-Host "flyway_schema_history table NOT found. Skiping flyway validate for fresh DB."
-                }          
-            # Flyway info dry run to show migration status
-          - task: PowerShell@2
-            displayName: 'Flyway Info (Dry Run)'
-            inputs:
-              targetType: 'inline'
-              script: |
-                $infoProcess = Start-Process -FilePath flyway -ArgumentList "info -configFiles=flyway.conf" -NoNewWindow -PassThru -Wait
-                if ($infoProcess.ExitCode -ne 0) {
-                  Write-Error "Flyway info command failed."
-                  exit 1
-                }          
+                Write-Host "Inserted into DB: $script"
+              }
+              $connection.Close()
+          env:
+            System.AccessToken: $(System.AccessToken)
+            dbUser: $(dbUser)
+            dbPassword: $(dbPassword)
+    
