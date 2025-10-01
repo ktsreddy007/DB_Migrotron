@@ -54,7 +54,7 @@ stages:
                   }
                 }
                 if ($rollbackScripts.Count -eq 0) {
-                  Write-Host "No rollback scripts detected in changes. Exiting."
+                  Write-Host "No rollback scripts detected in changes. Existing."
                   exit 0
                 }
                 $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
