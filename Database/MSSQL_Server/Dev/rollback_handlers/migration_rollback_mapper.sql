@@ -12,7 +12,7 @@ CREATE TABLE Payroll.dbo.migration_rollback_mapper (
     rollback_script_repo_folder VARCHAR(255),-- Default folder for rollback scripts
     rollback_script_repo_url VARCHAR(255),   -- Default GitHub repo URL for rollback scripts
     build_id INT,                            -- Azure DevOps Build ID
-    pr_id INT,                               -- Pull Request ID
+    pr_id BIGINT,                               -- Pull Request ID
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP -- Timestamp when the mapping was created
 );
 END;
