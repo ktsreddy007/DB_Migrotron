@@ -55,12 +55,7 @@ stages:
               $connection.ConnectionString = $connectionString
               $connection.Open()
               foreach ($script in $rollbackScripts) {
-                $query = @"
-                        INSERT INTO migration_rollback_mapper 
-                        (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url, build_id, pr_id)
-                        VALUES 
-                        ('$script', '$repoFolder', '$repoUrl', '$buildId', '$prId')
-                        "@
+                $query = "INSERT INTO migration_rollback_mapper (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url, build_id, pr_id) VALUES ('$script', '$repoFolder', '$repoUrl', '$buildId', '$prId')"
                 $command = $connection.CreateCommand()
                 $command.CommandText = $query
                 $command.ExecuteNonQuery()
