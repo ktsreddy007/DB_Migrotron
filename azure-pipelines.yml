@@ -21,54 +21,30 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                $prId = "$(System.PullRequest.PullRequestId)"
-                if (-not $prId) {
-                  Write-Warning "No PR ID detected. Using 'local' as PR ID."
-                  $prId = "local"
-                } else {
+                  $prId = "$(System.PullRequest.PullRequestId)"
                   Write-Host "PR ID detected: $prId"
-                }
-                $buildId = "$(Build.BuildId)"
-                $repoUrl = 'https://github.com/ktsreddy007/DB_Migrotron'
-                $repoFolder = 'rollback_sql'
-                $targetBranch = "origin/main"
-                git fetch origin main
-                $sourceBranch = "$(Build.SourceBranchName)"
-                if (-not $sourceBranch) {
-                  Write-Error "Source branch name not found. Exiting."
-                  exit 1
-                }
-                Write-Host "Source branch: $sourceBranch"
-                $changedFiles = git diff --name-only $targetBranch $sourceBranch
-                if (-not $changedFiles) {
-                  Write-Host "No changed files detected. Exiting."
-                  exit 0
-                }
-
-                $rollbackScripts = @()
-                foreach ($file in $changedFiles) {
-                  if ($file -like "rollback_sql/*.sql") {
-                    $filename = [System.IO.Path]::GetFileName($file)
-                    $rollbackScripts += $filename
-                    Write-Host "Detected rollback script: $filename"
+                  $sourceBranch = "$(System.PullRequest.SourceBranch)" -replace 'refs/heads/', ''
+                  Write-Host "Source branch: $sourceBranch"
+                  git fetch origin
+                  $changedFiles = git diff --name-only origin/main origin/$sourceBranch
+                  $rollbackScripts = $changedFiles | Where-Object { $_ -like "*Database/MSSQL_Server/Dev/rollback_sql/*.sql" }
+                  if (-not $rollbackScripts -or $rollbackScripts.Count -eq 0) {
+                              Write-Host "No changed rollback scripts detected. Exiting."
+                      exit 0
                   }
-                }
-                if ($rollbackScripts.Count -eq 0) {
-                  Write-Host "No rollback scripts detected in changes. Exiting."
-                  exit 0
-                }
-                $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
-                $connection = New-Object System.Data.SqlClient.SqlConnection
-                $connection.ConnectionString = $connectionString
-                $connection.Open()
-                foreach ($script in $rollbackScripts) {
-                  $query = "INSERT INTO migration_rollback_mapper (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url, build_id, pr_id) VALUES ('$script', '$repoFolder', '$repoUrl', '$buildId', '$prId')"
-                  $command = $connection.CreateCommand()
-                  $command.CommandText = $query
-                  $command.ExecuteNonQuery()
-                  Write-Host "Inserted into DB: $script"
-                }
-                $connection.Close()
+                  $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
+                  $connection = New-Object System.Data.SqlClient.SqlConnection
+                  $connection.ConnectionString = $connectionString
+                  $connection.Open()
+                  foreach ($scriptPath in $rollbackScripts) {
+                      $scriptName = [System.IO.Path]::GetFileName($scriptPath)
+                      $query = "INSERT INTO migration_rollback_mapper (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url, build_id, pr_id) VALUES ('$scriptName', 'Database/MSSQL_Server/Dev/rollback_sql', 'https://github.com/ktsreddy007/DB_Migrotron', '$(Build.BuildId)', '$prId')"
+                      $command = $connection.CreateCommand()
+                      $command.CommandText = $query
+                      $command.ExecuteNonQuery()
+                      Write-Host "✅ Inserted into DB: $scriptName"
+                  }
+                  $connection.Close()
             env:
               dbUser: $(dbUser)
               dbPassword: $(dbPassword)
