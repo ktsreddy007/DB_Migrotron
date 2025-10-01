@@ -1,0 +1,2 @@
+Hi 
+SELECT*from teja;
