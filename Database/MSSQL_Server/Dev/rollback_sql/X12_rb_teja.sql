@@ -1,2 +1,0 @@
-Hi 
-SELECT*from teja;
