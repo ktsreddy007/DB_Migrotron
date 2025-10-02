@@ -13,6 +13,7 @@ pool:
 
 stages:
   - stage: CaptureRollbackScripts
+    condition: eq(variables['Build.Reason'], 'PullRequest')  # only PR runs 
     displayName: 'Capture Rollback Scripts and Insert into Mapper Table'
     jobs:
       - job: DB_Migrator
