@@ -26,7 +26,7 @@ stages:
                   $sourceBranch = "$(System.PullRequest.SourceBranch)" -replace 'refs/heads/', ''
                   Write-Host "Source branch: $sourceBranch"
                   git fetch origin
-                  $changedFiles = git diff --name-only origin/main origin/$sourceBranch
+                  $changedFiles = git diff --diff-filter=AM --name-only origin/main origin/$sourceBranch
                   $rollbackScripts = $changedFiles | Where-Object { $_ -like "*Database/MSSQL_Server/Dev/rollback_sql/*.sql" }
                   if (-not $rollbackScripts -or $rollbackScripts.Count -eq 0) {
                               Write-Host "No changed rollback scripts detected. Exiting."
