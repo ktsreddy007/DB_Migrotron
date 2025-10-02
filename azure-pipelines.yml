@@ -1,4 +1,7 @@
-trigger: none
+trigger: 
+  branches:
+    include:
+      - main
 
 pr:
   branches:
@@ -196,3 +199,32 @@ stages:
             env:
               dbUser: $(dbUser)
               dbPassword: $(dbPassword)                
+  - stage: FlywayMigrate
+    displayName: 'Flyway Database Migration'
+    dependsOn: CaptureRollbackScripts
+    condition: |
+      and(
+        succeeded(),
+        eq(variables['Build.Reason'], 'IndividualCI'),
+        startsWith(variables['Build.SourceBranch'], 'refs/heads/main')
+        )
+    jobs:
+      - job: FlywayMigrationJob
+        displayName: Migration phase
+        pool:
+          name: Self-Hosted
+        steps:
+          - task: PowerShell@2
+            displayName: 'Run Flyway Migrate'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Flyway migrate triggered on merged PR (push to main branch)"
+                $flywayConfigPath = "$(Build.SourcesDirectory)\Database\MSSQL_Server\Dev\conf\flyway-dev.conf"
+                $migrateArgs = "migrate -configFiles=`"$flywayConfigPath`""
+                $process = Start-Process -FilePath flyway -ArgumentList $migrateArgs -NoNewWindow -PassThru -Wait
+                if ($process.ExitCode -ne 0) {
+                  Write-Error "Flyway migrate failed."
+                  exit 1
+                }
+                Write-Host "✅ Flyway migrate completed successfully." 
