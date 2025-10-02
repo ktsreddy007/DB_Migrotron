@@ -133,7 +133,7 @@ stages:
                     $rollbackCount = $command.ExecuteScalar()
                     $connection.Close()
                     if ($rollbackCount -eq 0) {
-                          Write-Error "No valid rollback scripts found for PR $prId. Failing pipeline."
+                          Write-Host "No valid rollback scripts found for PR $prId. Failing pipeline."
                           exit 1
                         } else {
                         Write-Host "Valid Rollback script(s) found: $rollbackCount for PR $prId. Proceeding..."
