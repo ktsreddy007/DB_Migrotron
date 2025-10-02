@@ -205,7 +205,19 @@ stages:
                 Write-Host "✅ Deleted $deleted rollback record(s) for PR ID $prId."
             env:
               dbUser: $(dbUser)
-              dbPassword: $(dbPassword)                
+              dbPassword: $(dbPassword)
+  - stage: DebugInfo
+    displayName: 'Debug Info Stage'
+    condition: always()  # Always run to capture values
+    jobs:
+      - job: PrintDebug
+        steps:
+          - script: |
+              echo "Build Reason: $(Build.Reason)"
+              echo "Source Branch: $(Build.SourceBranch)"
+              echo "Target Branch: $(System.PullRequest.TargetBranch)"
+              echo "PR ID: $(System.PullRequest.PullRequestId)"
+              echo "Is this a PR build? $(System.PullRequest.IsPullRequest)"                        
   - stage: FlywayMigrate
     displayName: 'Flyway Database Migration'
     dependsOn: CaptureRollbackScripts
