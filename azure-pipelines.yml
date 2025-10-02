@@ -102,4 +102,47 @@ stages:
                 }
                 else {
                     Write-Host "flyway_schema_history table NOT found. Skiping flyway validate for fresh DB."
-                }                    
+                }
+          - task: PowerShell@2
+            displayName: 'Flyway Info (Dry Run)'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $flywayConfigPath = "$(Build.SourcesDirectory)\Database\MSSQL_Server\Dev\conf\flyway-dev.conf"
+                Write-Host "Using Flyway config file at path: $flywayConfigPath"
+                $infoArgs = "info -configFiles=`"$flywayConfigPath`""
+                $infoProcess = Start-Process -FilePath flyway -ArgumentList $infoArgs -NoNewWindow -PassThru -Wait
+                if ($infoProcess.ExitCode -ne 0) {
+                    Write-Error "Flyway info command failed."
+                    exit 1
+                }
+          - task: PowerShell@2
+            displayName: 'Check if Rollback Script Exists for this PR'
+            inputs:
+                targetType: 'inline'
+                script: |
+                    $prId = "$(System.PullRequest.PullRequestId)"
+                    Write-Host "Checking rollback scripts for PR ID: $prId"
+                    $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
+                    $connection = New-Object System.Data.SqlClient.SqlConnection
+                    $connection.ConnectionString = $connectionString
+                    $connection.Open()
+                    $query = "SELECT COUNT(*) FROM migration_rollback_mapper WHERE pr_id = '$prId'"
+                    $command = $connection.CreateCommand()
+                    $command.CommandText = $query
+                    $rollbackCount = $command.ExecuteScalar()
+                    $connection.Close()
+                    if ($rollbackCount -eq 0) {
+                          Write-Error "❌ No rollback scripts found for PR $prId. Failing pipeline."
+                          exit 1
+                        } else {
+                        Write-Host "✅ Rollback script(s) found: $rollbackCount for PR $prId. Proceeding..."
+                    }
+            env:
+              dbUser: $(dbUser)
+              dbPassword: $(dbPassword)          
+
+
+
+
+             
