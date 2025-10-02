@@ -127,16 +127,16 @@ stages:
                     $connection = New-Object System.Data.SqlClient.SqlConnection
                     $connection.ConnectionString = $connectionString
                     $connection.Open()
-                    $query = "SELECT COUNT(*) FROM migration_rollback_mapper WHERE pr_id = '$prId'"
+                    $query = "SELECT COUNT(*) FROM migration_rollback_mapper WHERE pr_id = '$prId' AND rollback_script_name IS NOT NULL AND LTRIM(RTRIM(rollback_script_name)) <> ''"
                     $command = $connection.CreateCommand()
                     $command.CommandText = $query
                     $rollbackCount = $command.ExecuteScalar()
                     $connection.Close()
                     if ($rollbackCount -eq 0) {
-                          Write-Error "❌ No rollback scripts found for PR $prId. Failing pipeline."
+                          Write-Error "No valid rollback scripts found for PR $prId. Failing pipeline."
                           exit 1
                         } else {
-                        Write-Host "✅ Rollback script(s) found: $rollbackCount for PR $prId. Proceeding..."
+                        Write-Host "Valid Rollback script(s) found: $rollbackCount for PR $prId. Proceeding..."
                     }
             env:
               dbUser: $(dbUser)
