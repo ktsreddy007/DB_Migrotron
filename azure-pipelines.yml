@@ -149,7 +149,7 @@ stages:
       and(
         eq(variables['Build.Reason'], 'PullRequest'),
         eq(variables['System.PullRequest.IsFork'], false),
-        in(variables['System.PullRequest.PullRequestStatus'], 'abandoned', 'rejected')
+        in(variables['System.PullRequest.PullRequestStatus'], 'abandoned', 'rejected'),
         eq(dependencies.CaptureRollbackScripts.outputs['DB_Migrator.CheckRollbackScripts.HasRollbackEntry'], 'true')
       )
     jobs:
@@ -170,8 +170,8 @@ stages:
                 Write-Host "   - Build Reason: $buildReason"
                 Write-Host "   - PR Status: $prStatus"
                 if ($buildReason -ne "PullRequest" -or ($prStatus -ne "abandoned" -and $prStatus -ne "rejected")) {
-                      Write-Host "Conditions not met for cleanup. Skipping rollback entry deletion."
-                    exit 0
+                  Write-Host "Conditions not met for cleanup. Skipping rollback entry deletion."
+                  exit 0
                 }
                 Write-Host "🧹 Cleaning up rollback entry for abandoned PR: $prId"
                 $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
@@ -183,9 +183,9 @@ stages:
                 $checkCommand.CommandText = $checkQuery
                 $entryCount = $checkCommand.ExecuteScalar()
                 if ($entryCount -eq 0) {
-                      Write-Host "No rollback entries found for PR $prId. Nothing to delete."
-                      $connection.Close()
-                      exit 0
+                  Write-Host "No rollback entries found for PR $prId. Nothing to delete."
+                  $connection.Close()
+                  exit 0
                 }
                 $query = "DELETE FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = '$prId'"
                 $command = $connection.CreateCommand()
