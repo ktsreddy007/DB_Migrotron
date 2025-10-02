@@ -38,7 +38,7 @@ stages:
                   $connection.Open()
                   foreach ($scriptPath in $rollbackScripts) {
                       $scriptName = [System.IO.Path]::GetFileName($scriptPath)
-                      $query = "INSERT INTO migration_rollback_mapper (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url, build_id, pr_id) VALUES ('$scriptName', 'Database/MSSQL_Server/Dev/rollback_sql', 'https://github.com/ktsreddy007/DB_Migrotron', '$(Build.BuildId)', '$prId')"
+                      $query = "INSERT INTO Payroll.dbo.migration_rollback_mapper (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url, build_id, pr_id) VALUES ('$scriptName', 'Database/MSSQL_Server/Dev/rollback_sql', 'https://github.com/ktsreddy007/DB_Migrotron', '$(Build.BuildId)', '$prId')"
                       $command = $connection.CreateCommand()
                       $command.CommandText = $query
                       $command.ExecuteNonQuery()
@@ -127,7 +127,7 @@ stages:
                     $connection = New-Object System.Data.SqlClient.SqlConnection
                     $connection.ConnectionString = $connectionString
                     $connection.Open()
-                    $query = "SELECT COUNT(*) FROM migration_rollback_mapper WHERE pr_id = '$prId' AND rollback_script_name IS NOT NULL AND LTRIM(RTRIM(rollback_script_name)) <> ''"
+                    $query = "SELECT COUNT(*) FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = '$prId' AND rollback_script_name IS NOT NULL AND LTRIM(RTRIM(rollback_script_name)) <> ''"
                     $command = $connection.CreateCommand()
                     $command.CommandText = $query
                     $rollbackCount = $command.ExecuteScalar()
@@ -137,6 +137,7 @@ stages:
                           exit 1
                         } else {
                         Write-Host "Valid Rollback script(s) found: $rollbackCount for PR $prId. Proceeding..."
+                        ##vso[task.setvariable variable=HasRollbackEntry;isOutput=true]true
                     }
             env:
               dbUser: $(dbUser)
@@ -148,7 +149,8 @@ stages:
       and(
         eq(variables['Build.Reason'], 'PullRequest'),
         eq(variables['System.PullRequest.IsFork'], false),
-        in(variables['System.PullRequest.PullRequestStatus'], 'abandoned', 'rejected')  # This helps catch closed PRs
+        in(variables['System.PullRequest.PullRequestStatus'], 'abandoned', 'rejected')
+        eq(dependencies.CaptureRollbackScripts.outputs['DB_Migrator.CheckRollbackScripts.HasRollbackEntry'], 'true')
       )
     jobs:
       - job: DeleteRollbackEntry
@@ -162,12 +164,30 @@ stages:
               targetType: 'inline'
               script: |
                 $prId = "$(System.PullRequest.PullRequestId)"
+                $prStatus = "$(System.PullRequest.PullRequestStatus)"
+                $buildReason = "$(Build.Reason)"
+                Write-Host "🔍 Evaluating cleanup conditions for PR: $prId"
+                Write-Host "   - Build Reason: $buildReason"
+                Write-Host "   - PR Status: $prStatus"
+                if ($buildReason -ne "PullRequest" -or ($prStatus -ne "abandoned" -and $prStatus -ne "rejected")) {
+                      Write-Host "Conditions not met for cleanup. Skipping rollback entry deletion."
+                    exit 0
+                }
                 Write-Host "🧹 Cleaning up rollback entry for abandoned PR: $prId"
                 $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
                 $connection = New-Object System.Data.SqlClient.SqlConnection
                 $connection.ConnectionString = $connectionString
                 $connection.Open()
-                $query = "DELETE FROM migration_rollback_mapper WHERE pr_id = '$prId'"
+                $checkQuery = "SELECT COUNT(*) FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = '$prId'"
+                $checkCommand = $connection.CreateCommand()
+                $checkCommand.CommandText = $checkQuery
+                $entryCount = $checkCommand.ExecuteScalar()
+                if ($entryCount -eq 0) {
+                      Write-Host "No rollback entries found for PR $prId. Nothing to delete."
+                      $connection.Close()
+                      exit 0
+                }
+                $query = "DELETE FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = '$prId'"
                 $command = $connection.CreateCommand()
                 $command.CommandText = $query
                 $deleted = $command.ExecuteNonQuery()
