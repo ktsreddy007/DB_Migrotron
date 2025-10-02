@@ -150,7 +150,7 @@ stages:
         eq(variables['Build.Reason'], 'PullRequest'),
         eq(variables['System.PullRequest.IsFork'], false),
         in(variables['System.PullRequest.PullRequestStatus'], 'abandoned', 'rejected')
-        eq(dependencies.CaptureRollbackScripts.outputs['DBMigratorJob.CheckRollbackScripts.HasRollbackEntry'], 'true')
+        eq(dependencies.CaptureRollbackScripts.outputs['DB_Migrator.CheckRollbackScripts.HasRollbackEntry'], 'true')
       )
     jobs:
       - job: DeleteRollbackEntry
