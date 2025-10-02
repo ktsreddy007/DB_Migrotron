@@ -220,13 +220,7 @@ stages:
               echo "Is this a PR build? $(System.PullRequest.IsPullRequest)"                        
   - stage: FlywayMigrate
     displayName: 'Flyway Database Migration'
-    dependsOn: CaptureRollbackScripts
-    condition: |
-      and(
-        succeeded(),
-        eq(variables['Build.Reason'], 'IndividualCI'),
-        startsWith(variables['Build.SourceBranch'], 'refs/heads/main')
-        )
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/heads/main'))
     jobs:
       - job: FlywayMigrationJob
         displayName: Migration phase
