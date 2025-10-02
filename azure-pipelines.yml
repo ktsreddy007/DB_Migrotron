@@ -140,9 +140,39 @@ stages:
                     }
             env:
               dbUser: $(dbUser)
-              dbPassword: $(dbPassword)          
-
-
-
-
-             
+              dbPassword: $(dbPassword)                        
+  - stage: CleanupRollbackEntryIfPRClosed
+    displayName: 'Delete Rollback Script Entry if PR is Closed without Merge'
+    dependsOn: CaptureRollbackScripts
+    condition: |
+      and(
+        eq(variables['Build.Reason'], 'PullRequest'),
+        eq(variables['System.PullRequest.IsFork'], false),
+        in(variables['System.PullRequest.PullRequestStatus'], 'abandoned', 'rejected')  # This helps catch closed PRs
+      )
+    jobs:
+      - job: DeleteRollbackEntry
+        displayName: 'Delete Rollback Mapper Entry'
+        pool:
+          name: Self-Hosted
+        steps:
+          - task: PowerShell@2
+            displayName: 'Delete rollback entries for closed PR'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $prId = "$(System.PullRequest.PullRequestId)"
+                Write-Host "🧹 Cleaning up rollback entry for abandoned PR: $prId"
+                $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
+                $connection = New-Object System.Data.SqlClient.SqlConnection
+                $connection.ConnectionString = $connectionString
+                $connection.Open()
+                $query = "DELETE FROM migration_rollback_mapper WHERE pr_id = '$prId'"
+                $command = $connection.CreateCommand()
+                $command.CommandText = $query
+                $deleted = $command.ExecuteNonQuery()
+                $connection.Close()
+                Write-Host "✅ Deleted $deleted rollback record(s) for PR ID $prId."
+            env:
+              dbUser: $(dbUser)
+              dbPassword: $(dbPassword)                
