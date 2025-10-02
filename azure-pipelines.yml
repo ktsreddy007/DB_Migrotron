@@ -6,7 +6,7 @@ pr:
       - main
 
 pool:
-  name: Self-Hosted   # Your aget pool name
+  name: Self-Hosted   # Your agent pool name
 
 stages:
   - stage: CaptureRollbackScripts
