@@ -220,13 +220,35 @@ stages:
               echo "Is this a PR build? $(System.PullRequest.IsPullRequest)"                        
   - stage: FlywayMigrate
     displayName: 'Flyway Database Migration'
-    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/heads/main'))
+    condition: and(
+              succeeded(),
+              eq(variables['Build.SourceBranch'], 'refs/heads/main')
+      )
     jobs:
-      - job: FlywayMigrationJob
-        displayName: Migration phase
-        pool:
-          name: Self-Hosted
+      - job: CheckMergeSourceAndMigrate
         steps:
+          - checkout: self
+          - task: PowerShell@2
+            displayName: 'Check Merge Source Branch'
+            inputs:
+              targetType: 'inline'
+              script: |
+                git fetch --all
+                $lastCommitMessage = git log -1 --pretty=format:"%s"
+                Write-Host "Last commit message: $lastCommitMessage"
+                if ($lastCommitMessage -match "Merge pull request") {
+                      $fullMerge = git log -1 --pretty=format:"%b"
+                      Write-Host "Merge body: $fullMerge"
+                      if ($fullMerge -match "from .*custom") {
+                          Write-Host "✅ PR was merged from 'custom'. Proceeding with migration..."
+                      } else {
+                          Write-Host "❌ PR was NOT from 'custom'. Skipping migration."
+                          exit 0
+                }
+                } else {
+                    Write-Host "❌ Not a merge commit. Skipping migration."
+                    exit 0
+                }
           - task: PowerShell@2
             displayName: 'Run Flyway Migrate'
             inputs:
