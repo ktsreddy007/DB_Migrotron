@@ -96,7 +96,7 @@ stages:
                 Write-Host "Using Flyway config file at path: $flywayConfigPath"
                 if ($tableExists -gt 0) {
                         Write-Host "flyway_schema_history table found. Proceeding with flyway validate."
-                        $validateArgs = "validate -configFiles=""$flywayConfigPath"""
+                        $validateArgs = "validate -ignoreMigrationPatterns='*:pending' -configFiles=""$flywayConfigPath"""
                         $validateProcess = Start-Process -FilePath flyway -ArgumentList $validateArgs -NoNewWindow -PassThru -Wait
                         if ($validateProcess.ExitCode -ne 0) {
                               Write-Error "Flyway validate failed."
