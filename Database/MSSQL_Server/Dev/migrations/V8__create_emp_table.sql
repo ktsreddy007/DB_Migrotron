@@ -14,3 +14,4 @@ CREATE TABLE Payroll.dbo.Employee (
     IsActive BIT DEFAULT 1,  -- Active employee flag
     CreatedAt DATETIME DEFAULT GETDATE()
 );
+END;
