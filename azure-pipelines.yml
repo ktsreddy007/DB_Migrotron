@@ -9,7 +9,7 @@ pr:
       - main
 
 pool:
-  name: Self-Hosted   # Your agent pool name
+  name: Self-Hosted   
 
 variables:
   DB_SERVER: 'localhost'
@@ -17,6 +17,10 @@ variables:
   FLYWAY_CONFIG_PATH: '$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/conf/flyway-dev.conf' 
   REPO_URL: 'https://github.com/ktsreddy007/DB_Migrotron' 
   REPO_FOLDER: 'Database/MSSQL_Server/Dev/rollback_sql'
+  LOG_FOLDER: 'E:/DevOpsLogs'
+  LOG_FILE: '$(LOG_FOLDER)/MigrationLog.txt'
+  TABLES_FILE: '$(LOG_FOLDER)/UsedTables.txt'
+
 
 stages:
   - stage: CaptureRollbackScripts
@@ -79,8 +83,15 @@ stages:
                 }      
             env:
                 dbUser: $(dbUser)
-                dbPassword: $(dbPassword) 
-            
+                dbPassword: $(dbPassword)
+###################################################################################
+  - stage: PrepareEnvironment
+    dependsOn: CaptureRollbackScripts
+    condition: succeeded()
+    displayName: 'Prepare Environment'
+    jobs:
+      - job: SetupTools
+        steps:
           - task: PowerShell@2
             displayName: 'Check and Install Java (via command only)'
             inputs:
@@ -108,6 +119,14 @@ stages:
                     $env:Path = "$flywayPath;$env:Path"
                     Write-Host "Flyway CLI installed successfully."
                   }
+######################################################
+  - stage: FlywayValidation
+    dependsOn: PrepareEnvironment
+    condition: succeeded()
+    displayName: 'Flyway Validate and Info'
+    jobs:
+      - job: ValidateFlyway
+        steps:
           - task: PowerShell@2
             displayName: 'Conditional Flyway Validate (skip on fresh DB)'
             inputs:
@@ -136,7 +155,7 @@ stages:
                 } 
             env:
               dbUser: $(dbUser)
-              dbPassword: $(dbPassword)  
+              dbPassword: $(dbPassword)     
           - task: PowerShell@2
             displayName: 'Flyway Info (Dry Run)'
             inputs:
@@ -147,7 +166,82 @@ stages:
                 if ($LASTEXITCODE -ne 0) {
                       Write-Error "Flyway info command failed."
                       exit 1
+                }                 
+######################################################
+  - stage: SQL_Linting
+    displayName: "SQL_Syntax_Checker"
+    jobs:
+     - job: SQL_Linting
+       steps:
+       - script: echo "This is a dummy stage for future use."
+######################################################
+  - stage: Premigration_SQLLogger
+    displayName: "Pre_SQL_Logger"
+    jobs:
+     - job: PreSQL_Logger
+       steps:
+          - checkout: self
+            persistCredentials: true
+            fetchDepth: 0
+          - task: PowerShell@2
+            displayName: 'Pre-Migration Table Record Logger'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $logFolder = "$(LOG_FOLDER)"
+                $logFile = "$(LOG_FILE)"
+                $tablesFile = "$(TABLES_FILE)"
+                if (-not (Test-Path $logFolder)) {
+                    New-Item -Path $logFolder -ItemType Directory | Out-Null
                 }
+                $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                $prId = "$(System.PullRequest.PullRequestId)"
+                $sourceBranch = "$(System.PullRequest.SourceBranch)"
+                $sourceBranchName = $sourceBranch -replace 'refs/heads/', ''
+                git fetch origin
+                $changedFilesRaw = git diff --diff-filter=AM --name-only origin/main origin/$sourceBranchName
+                $changedFiles = $changedFilesRaw -split "`n" | Where-Object { $_ -like "*.sql" }
+                $filteredFiles = $changedFiles | Where-Object { $_ -like "*Database/MSSQL_Server/Dev/sql/*" }
+                $tableNames = foreach ($file in $filteredFiles) {
+                    $fullPath = Join-Path -Path "$(Build.SourcesDirectory)" -ChildPath $file
+                    if (Test-Path $fullPath) {
+                        Get-Content $fullPath | 
+                        Select-String -Pattern "(?i)(create\s+table|insert\s+into)\s+(\[?\w+\]?\.)?\[?(?<table>\w+)\]?" |
+                        ForEach-Object { $_.Matches.Groups["table"].Value }
+                    }
+                } | Sort-Object -Unique
+                $tableNames | Out-File -FilePath $tablesFile -Encoding utf8
+                Add-Content -Path $logFile -Value "=====BEFORE RECORD COUNT====="
+                Add-Content -Path $logFile -Value "RunID: $(Build.BuildId)"
+                foreach ($table in $tableNames) {
+                    try {
+                        $query = "SELECT COUNT(*) FROM [$table]"
+                        $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
+                        $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString)
+                        $command = $connection.CreateCommand()
+                        $command.CommandText = $query
+                        $connection.Open()
+                        $count = $command.ExecuteScalar()
+                        $connection.Close()
+                        Add-Content -Path $logFile -Value "TableName : $table"
+                        Add-Content -Path $logFile -Value "RecordsCount : $count"
+                        Add-Content -Path $logFile -Value "Timestamp : $timestamp`n"
+                    } catch {
+                        Write-Host "Error fetching data for table $table: $_"
+                    }
+                }
+                Add-Content -Path $logFile -Value "======MIGRATION START ==============="
+            env:
+              dbUser: $(dbUser)
+              dbPassword: $(dbPassword)       
+#######################################################
+  - stage: Rollback_Finder
+    #dependsOn: SQL_Linting
+    #condition: succeeded()
+    displayName: 'Checks Rollback Scripts Exists for the PR'
+    jobs:
+      - job: RollbackCheck
+        steps:
           - task: PowerShell@2
             displayName: 'Check if Rollback Script Exists for this PR'
             inputs:
@@ -155,7 +249,7 @@ stages:
                 script: |
                     $prId = "$(System.PullRequest.PullRequestId)"
                     Write-Host "Checking rollback scripts for PR ID: $prId"
-                    $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$(dbUser);Password=$(dbPassword);"
+                    $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
                     [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
                     $connection = New-Object System.Data.SqlClient.SqlConnection
                     $connection.ConnectionString = $connectionString
@@ -180,7 +274,15 @@ stages:
                     }
             env:
               dbUser: $(dbUser)
-              dbPassword: $(dbPassword)                        
+              dbPassword: $(dbPassword)
+###############################################################             
+  - stage: Flyway_Migration
+    #dependsOn: Rollback_Finder
+    #condition: succeeded()
+    displayName: 'Migrating the Scripts'
+    jobs:
+      - job: FlywayMigrate
+        steps:
           - task: PowerShell@2
             displayName: 'Run Flyway Migrate'
             inputs:
@@ -192,13 +294,63 @@ stages:
                   Write-Error "Flyway migrate failed."
                   exit 1
                 }
-                Write-Host "✅ Flyway migrate completed successfully."
+                Write-Host "Flyway migrate completed successfully."
             env:
               dbUser: $(dbUser)
               dbPassword: $(dbPassword)
-          - task: PowerShell@2
-            displayName: 'Update Migration Version and Script in Mapper Table'
-            inputs:
+###################################################################
+  - stage: Postmigration_SQLLogger
+    dependsOn: Premigration_SQLLogger
+    condition: succeeded()
+    displayName: "Post_SQL_Logger"
+    jobs:
+     - job: PostSQL_Logger
+       steps:
+         - task: PowerShell@2
+           displayName: 'Post-Migration Table Record Logger'
+           inputs:
+              targetType: 'inline'
+              script: |
+                $logFile = "$(LOG_FILE)"
+                $tablesFile = "$(TABLES_FILE)"
+                $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                Add-Content -Path $logFile -Value "=====AFTER RECORD COUNT====="
+                Add-Content -Path $logFile -Value "RunID: $(Build.BuildId)"
+                if (-Not (Test-Path $tablesFile)) {
+                    Write-Error "UsedTables.txt not found. Cannot continue."
+                    exit 1
+                }
+                $tableNames = Get-Content $tablesFile | Sort-Object -Unique
+                foreach ($table in $tableNames) {
+                    try {
+                        $query = "SELECT COUNT(*) FROM [$table]"
+                        $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
+                        $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString)
+                        $command = $connection.CreateCommand()
+                        $command.CommandText = $query
+                        $connection.Open()
+                        $count = $command.ExecuteScalar()
+                        $connection.Close()
+                        Add-Content -Path $logFile -Value "TableName : $table"
+                        Add-Content -Path $logFile -Value "RecordsCount : $count"
+                        Add-Content -Path $logFile -Value "Timestamp : $timestamp`n"
+                      } catch {
+                        Write-Host "Error fetching data for table $table: $_"
+                      }
+                    }
+                Add-Content -Path $logFile -Value "=========MIGRATION COMPLETE =========`n"
+           env:
+             dbUser: $(dbUser)
+             dbPassword: $(dbPassword)
+###################################################################
+  - stage: Mappertb_updater
+    displayName: "Migration_Rollback_Updater"
+    jobs:
+     - job: Updating_Mapper_Table
+       steps:
+        - task: PowerShell@2
+          displayName: 'Update Migration Version and Script in Mapper Table'
+          inputs:
               targetType: 'inline'
               script: |
                 try {
@@ -238,17 +390,40 @@ stages:
                         $updateCmd.Parameters.AddWithValue("@buildId", $buildId) | Out-Null
                         $updateCmd.Parameters.AddWithValue("@rollbackName", $rollbackFile) | Out-Null
                         $updated = $updateCmd.ExecuteNonQuery()
-                        Write-Host "✅ Updated $updated record(s) for '$rollbackFile' with version '$version'"
+                        Write-Host "Updated $updated record(s) for '$rollbackFile' with version '$version'"
                     } else {
                         $migrationReader.Close()
-                        Write-Host "⚠️ No migration found for rollback script '$rollbackFile'"
+                        Write-Host "No migration found for rollback script '$rollbackFile'"
                       }
                 }
                 $connection.Close()
                 } catch {
-                    Write-Error "❌ Error updating rollback mapper: $_"
+                    Write-Error "Error updating rollback mapper: $_"
                     exit 1
                 }             
+          env:
+              dbUser: $(dbUser)
+              dbPassword: $(dbPassword)
+###################################################################
+  - stage: Postmigration_Flyway_Validator
+    dependsOn: Flyway_Migration
+    condition: succeeded()
+    displayName: "Post_Flyway_Validator"
+    jobs:
+      - job: PostFlyway_Validator
+        steps:
+          - task: PowerShell@2
+            displayName: 'Flyway Validate (Post Migration Consistency Check)'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Validating Flyway consistency after migration."
+                & flyway validate "-configFiles=$(FLYWAY_CONFIG_PATH)"
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Flyway validation failed. Database and scripts may be inconsistent!"
+                    exit 1
+                }
             env:
               dbUser: $(dbUser)
               dbPassword: $(dbPassword)
+         
