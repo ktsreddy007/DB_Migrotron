@@ -223,7 +223,7 @@ stages:
                   foreach ($rollbackFile in $rollbackScripts) {
                     $baseName = [System.IO.Path]::GetFileNameWithoutExtension($rollbackFile).ToLower() -replace "^rb__",""
                     $migrationCmd = $connection.CreateCommand()
-                    $migrationCmd.CommandText = "SELECT TOP 1 version, script FROM flyway_schema_history WHERE success = 1 AND script LIKE '%__' + @baseName + '.sql' ORDER BY installed_on DESC"
+                    $migrationCmd.CommandText = "SELECT TOP 1 version, script FROM flyway_schema_history WHERE success = 1 AND script COLLATE SQL_Latin1_General_CP1_CI_AS LIKE '%__' + @baseName + '.sql' ORDER BY installed_on DESC"
                     $migrationCmd.Parameters.AddWithValue("@baseName", $baseName) | Out-Null
                     $migrationReader = $migrationCmd.ExecuteReader()
                     if ($migrationReader.Read()) {
