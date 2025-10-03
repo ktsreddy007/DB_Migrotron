@@ -231,7 +231,8 @@ stages:
                         Add-Content -Path $logFile -Value "RecordsCount : $count"
                         Add-Content -Path $logFile -Value "Timestamp : $timestamp`n"
                     } catch {
-                        Write-Host "Error fetching data for table $table: $_"
+                        $err = $_.Exception.Message
+                        Write-Host "Error fetching data for table ${table}: $_"
                     }
                 }
                 Add-Content -Path $logFile -Value "======MIGRATION START ==============="
@@ -337,7 +338,8 @@ stages:
                         Add-Content -Path $logFile -Value "RecordsCount : $count"
                         Add-Content -Path $logFile -Value "Timestamp : $timestamp`n"
                       } catch {
-                        Write-Host "Error fetching data for table $table: $_"
+                        $err = $_.Exception.Message
+                        Write-Host "Error fetching data for table ${table}: $_"
                       }
                     }
                 Add-Content -Path $logFile -Value "=========MIGRATION COMPLETE =========`n"
