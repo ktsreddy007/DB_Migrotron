@@ -1,9 +1,9 @@
 IF NOT EXISTS (
     SELECT * FROM INFORMATION_SCHEMA.TABLES
-    WHERE TABLE_NAME = 'Payroll.dbo.Myuser' AND TABLE_SCHEMA = 'dbo'
+    WHERE TABLE_NAME = 'Payroll.dbo.dumptb' AND TABLE_SCHEMA = 'dbo'
 )
 BEGIN
-CREATE TABLE Payroll.dbo.Myuser (
+CREATE TABLE Payroll.dbo.dumptb (
     EmployeeID INT IDENTITY(1,1) PRIMARY KEY,  -- Auto-increment primary key
     FirstName NVARCHAR(50) NOT NULL,
     LastName NVARCHAR(50) NOT NULL,
