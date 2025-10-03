@@ -201,7 +201,7 @@ stages:
                 git fetch origin
                 $changedFilesRaw = git diff --diff-filter=AM --name-only origin/main origin/$sourceBranchName
                 $changedFiles = $changedFilesRaw -split "`n" | Where-Object { $_ -like "*.sql" }
-                $filteredFiles = $changedFiles | Where-Object { $_ -like "*Database/MSSQL_Server/Dev/sql/*" }
+                $filteredFiles = $changedFiles | Where-Object { $_ -like "*Database/MSSQL_Server/Dev/migrations/*" }
                 $tableNames = foreach ($file in $filteredFiles) {
                     $fullPath = Join-Path -Path "$(Build.SourcesDirectory)" -ChildPath $file
                     if (Test-Path $fullPath) {
