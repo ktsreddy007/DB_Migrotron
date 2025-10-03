@@ -202,14 +202,18 @@ stages:
                 $changedFilesRaw = git diff --diff-filter=AM --name-only origin/main origin/$sourceBranchName
                 $changedFiles = $changedFilesRaw -split "`n" | Where-Object { $_ -like "*.sql" }
                 $filteredFiles = $changedFiles | Where-Object { $_ -like "*Database/MSSQL_Server/Dev/sql/*" }
-                $tableNames = foreach ($file in $filteredFiles) {
+                $tableNames = @()
+                foreach ($file in $filteredFiles) {
                     $fullPath = Join-Path -Path "$(Build.SourcesDirectory)" -ChildPath $file
                     if (Test-Path $fullPath) {
-                        Get-Content $fullPath | 
-                        Select-String -Pattern "(?i)(create\s+table|insert\s+into)\s+(\[?\w+\]?\.)?\[?(?<table>\w+)\]?" |
-                        ForEach-Object { $_.Matches.Groups["table"].Value }
+                        $matches = Get-Content $fullPath |
+                        Select-String -Pattern "(?i)(create\s+table|insert\s+into)\s+(\[?\w+\]?\.)?\[?(?<table>\w+)\]?" -AllMatches
+                        foreach ($match in $matches.Matches) {
+                          $tableNames += $match.Groups["table"].Value 
+                          }
+                      }
                     }
-                } | Sort-Object -Unique
+                $tableNames = $tableNames | Sort-Object -Unique
                 $tableNames | Out-File -FilePath $tablesFile -Encoding utf8
                 Add-Content -Path $logFile -Value "=====BEFORE RECORD COUNT====="
                 Add-Content -Path $logFile -Value "RunID: $(Build.BuildId)"
@@ -236,9 +240,9 @@ stages:
               dbPassword: $(dbPassword)       
 #######################################################
   - stage: Rollback_Finder
-    #dependsOn: SQL_Linting
-    #condition: succeeded()
-    displayName: 'Checks Rollback Scripts Exists for the PR'
+    dependsOn: Premigration_SQLLogger
+    condition: succeeded()
+    displayName: "Rollback Scripts Existence"
     jobs:
       - job: RollbackCheck
         steps:
@@ -277,8 +281,8 @@ stages:
               dbPassword: $(dbPassword)
 ###############################################################             
   - stage: Flyway_Migration
-    #dependsOn: Rollback_Finder
-    #condition: succeeded()
+    dependsOn: Rollback_Finder
+    condition: succeeded()
     displayName: 'Migrating the Scripts'
     jobs:
       - job: FlywayMigrate
@@ -300,8 +304,6 @@ stages:
               dbPassword: $(dbPassword)
 ###################################################################
   - stage: Postmigration_SQLLogger
-    dependsOn: Premigration_SQLLogger
-    condition: succeeded()
     displayName: "Post_SQL_Logger"
     jobs:
      - job: PostSQL_Logger
@@ -345,6 +347,7 @@ stages:
 ###################################################################
   - stage: Mappertb_updater
     displayName: "Migration_Rollback_Updater"
+    dependsOn: Flyway_Migration
     jobs:
      - job: Updating_Mapper_Table
        steps:
