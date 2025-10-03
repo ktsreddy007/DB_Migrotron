@@ -196,3 +196,44 @@ stages:
             env:
               dbUser: $(dbUser)
               dbPassword: $(dbPassword)
+          - task: PowerShell@2
+            displayName: 'Update Migration Version and Script in Mapper Table'
+            inputs:
+              targetType: 'inline'
+              script: |
+                try {
+                  $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$(dbUser);Password=$(dbPassword);"
+                  [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
+                  $connection = New-Object System.Data.SqlClient.SqlConnection
+                  $connection.ConnectionString = $connectionString
+                  $connection.Open()
+                  $query = "SELECT TOP 1 version, script FROM flyway_schema_history WHERE success = 1 ORDER BY installed_on DESC"
+                  $command = $connection.CreateCommand()
+                  $command.CommandText = $query
+                  $reader = $command.ExecuteReader()
+                  if ($reader.Read()) {
+                    $migrationVersion = $reader["version"]
+                    $migrationScript = $reader["script"]
+                    Write-Host "Latest migration version: $migrationVersion"
+                    Write-Host "Latest migration script: $migrationScript"
+                  } else {
+                    Write-Error "No successful Flyway migrations found."
+                    $reader.Close()
+                    $connection.Close()
+                    exit 1 }
+                $reader.Close()
+                $updateCmd = $connection.CreateCommand()
+                $updateCmd.CommandText = "UPDATE Payroll.dbo.migration_rollback_mapper SET migration_version = @version, migration_script = @script WHERE pr_id = @prId AND build_id = @buildId"
+                $updateCmd.Parameters.AddWithValue("@version", $migrationVersion) | Out-Null
+                $updateCmd.Parameters.AddWithValue("@script", $migrationScript) | Out-Null
+                $updateCmd.Parameters.AddWithValue("@prId", "$(System.PullRequest.PullRequestId)") | Out-Null
+                $updateCmd.Parameters.AddWithValue("@buildId", "$(Build.BuildId)") | Out-Null
+                $rowsUpdated = $updateCmd.ExecuteNonQuery()
+                Write-Host "✅ Updated $rowsUpdated record(s) in migration_rollback_mapper with migration version and script."
+                $connection.Close()} 
+                catch {
+                  Write-Error "An error occurred while updating migration details: $_"
+                  exit 1 }
+            env:
+              dbUser: $(dbUser)
+              dbPassword: $(dbPassword)
