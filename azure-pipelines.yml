@@ -210,14 +210,16 @@ stages:
                         if (Test-Path $fullPath) {
                             Write-Host "Processing file: $fullPath"
                             $matches = Get-Content $fullPath |
-                            Select-String -Pattern "(?i)(create\s+table|insert\s+into)\s+(\[?\w+\]?\.)?\[?(?<table>\w+)\]?" -AllMatches
+                            Select-String -Pattern "(?i)(create\s+table|insert\s+into)\s+((\[[^\]]+\]|\w+)\.)*((\[[^\]]+\]|\w+))" -AllMatches
                             foreach ($match in $matches.Matches) {
-                                $table = $match.Groups["table"].Value
-                                if ($table -and -not ($tableNames -contains $table)) {
-                                    $tableNames += $table
-                                    Write-Host "  → Found table: $table"
-                                }
-                            }
+                                  $fullMatch = $match.Matches[0].Value
+                                  $parts = $fullMatch -split '\.'
+                                  $table = $parts[-1] -replace '\[|\]', ''  # Remove brackets
+                                  if ($table -and -not ($tableNames -contains $table)) {
+                                        $tableNames += $table
+                                        Write-Host "  → Found table: $table"
+                                  }
+                              }
                         } else {
                             Write-Host "File not found: $fullPath"
                           }
