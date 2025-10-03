@@ -11,47 +11,76 @@ pr:
 pool:
   name: Self-Hosted   # Your agent pool name
 
+variables:
+  DB_SERVER: 'localhost'
+  DB_NAME: 'Payroll'
+  FLYWAY_CONFIG_PATH: '$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/conf/flyway-dev.conf' 
+  REPO_URL: 'https://github.com/ktsreddy007/DB_Migrotron' 
+  REPO_FOLDER: 'Database/MSSQL_Server/Dev/rollback_sql'
+
 stages:
   - stage: CaptureRollbackScripts
-    condition: eq(variables['Build.Reason'], 'PullRequest')  # only PR runs 
+    condition: eq(variables['Build.Reason'], 'PullRequest')
     displayName: 'Capture Rollback Scripts and Insert into Mapper Table'
     jobs:
       - job: DB_Migrator
         steps:
           - checkout: self
             persistCredentials: true
+            fetchDepth: 0
           - task: PowerShell@2
             displayName: 'File Capture and Insertor'
             inputs:
               targetType: 'inline'
               script: |
-                  $prId = "$(System.PullRequest.PullRequestId)"
-                  Write-Host "PR ID detected: $prId"
-                  $sourceBranch = "$(System.PullRequest.SourceBranch)" -replace 'refs/heads/', ''
-                  Write-Host "Source branch: $sourceBranch"
-                  git fetch origin
-                  $changedFiles = git diff --diff-filter=AM --name-only origin/main origin/$sourceBranch
-                  $rollbackScripts = $changedFiles | Where-Object { $_ -like "*Database/MSSQL_Server/Dev/rollback_sql/*.sql" }
-                  if (-not $rollbackScripts -or $rollbackScripts.Count -eq 0) {
-                              Write-Host "No changed rollback scripts detected. Exiting."
-                      exit 0
-                  }
-                  $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
-                  $connection = New-Object System.Data.SqlClient.SqlConnection
-                  $connection.ConnectionString = $connectionString
-                  $connection.Open()
-                  foreach ($scriptPath in $rollbackScripts) {
-                      $scriptName = [System.IO.Path]::GetFileName($scriptPath)
-                      $query = "INSERT INTO Payroll.dbo.migration_rollback_mapper (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url, build_id, pr_id) VALUES ('$scriptName', 'Database/MSSQL_Server/Dev/rollback_sql', 'https://github.com/ktsreddy007/DB_Migrotron', '$(Build.BuildId)', '$prId')"
-                      $command = $connection.CreateCommand()
-                      $command.CommandText = $query
-                      $command.ExecuteNonQuery()
-                      Write-Host "✅ Inserted into DB: $scriptName"
-                  }
-                  $connection.Close()
+                try {
+                      $prId = "$(System.PullRequest.PullRequestId)"
+                      if (-not $prId) {
+                          Write-Host "PR ID not available. Exiting stage."
+                          exit 0
+                        }
+                      Write-Host "PR ID detected: $prId"
+                      $sourceBranch = "$(System.PullRequest.SourceBranch)"
+                      $sourceBranchName = $sourceBranch -replace 'refs/heads/', ''
+                      Write-Host "Source branch: $sourceBranchName"
+                      git fetch origin
+                      $changedFilesRaw = git diff --diff-filter=AM --name-only origin/main origin/$sourceBranchName
+                      $changedFiles = $changedFilesRaw -split "`n" | Where-Object { $_ -ne "" }
+                      if (-not $changedFiles -or $changedFiles.Count -eq 0) {
+                            Write-Host "No changed files detected. Exiting."
+                            exit 0
+                      }
+                      $rollbackScripts = $changedFiles | Where-Object { $_ -like "*Database/MSSQL_Server/Dev/rollback_sql/*.sql" }
+                      if (-not $rollbackScripts -or $rollbackScripts.Count -eq 0) {
+                            Write-Host "No rollback scripts found. Exiting job."
+                            exit 0
+                      }
+                      [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
+                      $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
+                      $connection = New-Object System.Data.SqlClient.SqlConnection
+                      $connection.ConnectionString = $connectionString
+                      $connection.Open()
+                      foreach ($scriptPath in $rollbackScripts) {
+                          $scriptName = [System.IO.Path]::GetFileName($scriptPath)
+                          $command = $connection.CreateCommand()
+                          $command.CommandText = "INSERT INTO Payroll.dbo.migration_rollback_mapper (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url, build_id, pr_id) VALUES (@scriptName, @repoFolder, @repoUrl, @buildId, @prId)"
+                          $command.Parameters.AddWithValue("@scriptName", $scriptName) | Out-Null
+                          $command.Parameters.AddWithValue("@repoFolder", "$(REPO_FOLDER)") | Out-Null
+                          $command.Parameters.AddWithValue("@repoUrl", "$(REPO_URL)") | Out-Null
+                          $command.Parameters.AddWithValue("@buildId", "$(Build.BuildId)") | Out-Null
+                          $command.Parameters.AddWithValue("@prId", $prId) | Out-Null
+                          $command.ExecuteNonQuery()
+                          Write-Host "Inserted into DB: $scriptName"
+                    }
+                    $connection.Close()
+                } catch {
+                    Write-Error "An error occurred: $_"
+                    exit 1
+                }      
             env:
-              dbUser: $(dbUser)
-              dbPassword: $(dbPassword)
+                dbUser: $(dbUser)
+                dbPassword: $(dbPassword) 
+            
           - task: PowerShell@2
             displayName: 'Check and Install Java (via command only)'
             inputs:
@@ -84,7 +113,8 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                $connectionString = "Server=localhost;Database=Payroll;User Id=Ktsreddy007;Password=Gold007@;"
+                $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$(dbUser);Password=$(dbPassword);"
+                [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
                 $connection = New-Object System.Data.SqlClient.SqlConnection
                 $connection.ConnectionString = $connectionString
                 $connection.Open()
@@ -93,38 +123,30 @@ stages:
                 $command.CommandText = $query
                 $tableExists = $command.ExecuteScalar()
                 $connection.Close()
-
-                $flywayConfigPath = "$(Build.SourcesDirectory)\Database\MSSQL_Server\Dev\conf\flyway-dev.conf"
-                Write-Host "Using Flyway config file at path: $flywayConfigPath"
-                
+                Write-Host "Using Flyway config file at path: $(FLYWAY_CONFIG_PATH)"
                 if ($tableExists -gt 0) {
                     Write-Host "flyway_schema_history table found. Proceeding with flyway validate."
-                    $validateArgs = @(
-                                      "validate"
-                                      "-ignoreMigrationPatterns=*:pending"
-                                      "-configFiles=$flywayConfigPath"
-                                       )
-                    $validateProcess = Start-Process -FilePath flyway -ArgumentList $validateArgs -NoNewWindow -PassThru -Wait
-                    if ($validateProcess.ExitCode -ne 0) {
-                        Write-Error "Flyway validate failed."
-                        exit 1
-                      }
-                }
-                else {
+                    & flyway validate "-ignoreMigrationPatterns=*:pending" "-configFiles=$(FLYWAY_CONFIG_PATH)"
+                    if ($LASTEXITCODE -ne 0) {
+                            Write-Error "Flyway validate failed."
+                            exit 1
+                    }
+                } else {
                     Write-Host "flyway_schema_history table NOT found. Skiping flyway validate for fresh DB."
-                }
+                } 
+            env:
+              dbUser: $(dbUser)
+              dbPassword: $(dbPassword)  
           - task: PowerShell@2
             displayName: 'Flyway Info (Dry Run)'
             inputs:
               targetType: 'inline'
               script: |
-                $flywayConfigPath = "$(Build.SourcesDirectory)\Database\MSSQL_Server\Dev\conf\flyway-dev.conf"
-                Write-Host "Using Flyway config file at path: $flywayConfigPath"
-                $infoArgs = "info -configFiles=`"$flywayConfigPath`""
-                $infoProcess = Start-Process -FilePath flyway -ArgumentList $infoArgs -NoNewWindow -PassThru -Wait
-                if ($infoProcess.ExitCode -ne 0) {
-                    Write-Error "Flyway info command failed."
-                    exit 1
+                Write-Host "Using Flyway config file at path: $(FLYWAY_CONFIG_PATH)"
+                & flyway info "-configFiles=$(FLYWAY_CONFIG_PATH)"
+                if ($LASTEXITCODE -ne 0) {
+                      Write-Error "Flyway info command failed."
+                      exit 1
                 }
           - task: PowerShell@2
             displayName: 'Check if Rollback Script Exists for this PR'
@@ -133,133 +155,44 @@ stages:
                 script: |
                     $prId = "$(System.PullRequest.PullRequestId)"
                     Write-Host "Checking rollback scripts for PR ID: $prId"
-                    $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
+                    $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$(dbUser);Password=$(dbPassword);"
+                    [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
                     $connection = New-Object System.Data.SqlClient.SqlConnection
                     $connection.ConnectionString = $connectionString
                     $connection.Open()
-                    $query = "SELECT COUNT(*) FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = '$prId' AND rollback_script_name IS NOT NULL AND LTRIM(RTRIM(rollback_script_name)) <> ''"
+                    $query = "SELECT COUNT(*) FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = @prId AND rollback_script_name IS NOT NULL AND LTRIM(RTRIM(rollback_script_name)) <> ''"
                     $command = $connection.CreateCommand()
                     $command.CommandText = $query
+                    $command.Parameters.AddWithValue("@prId", $prId) | Out-Null
                     $rollbackCount = $command.ExecuteScalar()
-                    $connection.Close()
                     if ($rollbackCount -eq 0) {
                           Write-Host "No valid rollback scripts found for PR $prId. Failing pipeline."
+                          $deleteCommand = $connection.CreateCommand()
+                          $deleteQuery = "DELETE FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = @prId"
+                          $deleteCommand.Parameters.AddWithValue("@prId", $prId) | Out-Null
+                          $deleted = $deleteCommand.ExecuteNonQuery()
+                          Write-Host "Deleted $deleted invalid rollback record(s) for PR ID $prId."
+                          $connection.Close()
                           exit 1
                         } else {
-                        Write-Host "Valid Rollback script(s) found: $rollbackCount for PR $prId. Proceeding..."
-                        ##vso[task.setvariable variable=HasRollbackEntry;isOutput=true]true
+                         Write-Host "Valid Rollback script(s) found: $rollbackCount for PR $prId. Proceeding to merge."
+                         $connection.Close()
                     }
             env:
               dbUser: $(dbUser)
               dbPassword: $(dbPassword)                        
-  - stage: CleanupRollbackEntryIfPRClosed
-    displayName: 'Delete Rollback Script Entry if PR is Closed without Merge'
-    dependsOn: CaptureRollbackScripts
-    condition: |
-      and(
-        eq(variables['Build.Reason'], 'PullRequest'),
-        eq(variables['System.PullRequest.IsFork'], false),
-        in(variables['System.PullRequest.PullRequestStatus'], 'abandoned', 'rejected'),
-        eq(dependencies.CaptureRollbackScripts.outputs['DB_Migrator.CheckRollbackScripts.HasRollbackEntry'], 'true')
-      )
-    jobs:
-      - job: DeleteRollbackEntry
-        displayName: 'Delete Rollback Mapper Entry'
-        pool:
-          name: Self-Hosted
-        steps:
-          - task: PowerShell@2
-            displayName: 'Delete rollback entries for closed PR'
-            inputs:
-              targetType: 'inline'
-              script: |
-                $prId = "$(System.PullRequest.PullRequestId)"
-                $prStatus = "$(System.PullRequest.PullRequestStatus)"
-                $buildReason = "$(Build.Reason)"
-                Write-Host "🔍 Evaluating cleanup conditions for PR: $prId"
-                Write-Host "   - Build Reason: $buildReason"
-                Write-Host "   - PR Status: $prStatus"
-                if ($buildReason -ne "PullRequest" -or ($prStatus -ne "abandoned" -and $prStatus -ne "rejected")) {
-                      Write-Host "Conditions not met for cleanup. Skipping rollback entry deletion."
-                    exit 0
-                }
-                Write-Host "🧹 Cleaning up rollback entry for abandoned PR: $prId"
-                $connectionString = "Server=localhost;Database=Payroll;User Id=$(dbUser);Password=$(dbPassword);"
-                $connection = New-Object System.Data.SqlClient.SqlConnection
-                $connection.ConnectionString = $connectionString
-                $connection.Open()
-                $checkQuery = "SELECT COUNT(*) FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = '$prId'"
-                $checkCommand = $connection.CreateCommand()
-                $checkCommand.CommandText = $checkQuery
-                $entryCount = $checkCommand.ExecuteScalar()
-                if ($entryCount -eq 0) {
-                      Write-Host "No rollback entries found for PR $prId. Nothing to delete."
-                      $connection.Close()
-                      exit 0
-                }
-                $query = "DELETE FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = '$prId'"
-                $command = $connection.CreateCommand()
-                $command.CommandText = $query
-                $deleted = $command.ExecuteNonQuery()
-                $connection.Close()
-                Write-Host "✅ Deleted $deleted rollback record(s) for PR ID $prId."
-            env:
-              dbUser: $(dbUser)
-              dbPassword: $(dbPassword)
-  - stage: DebugInfo
-    displayName: 'Debug Info Stage'
-    condition: always()  # Always run to capture values
-    jobs:
-      - job: PrintDebug
-        steps:
-          - script: |
-              echo "Build Reason: $(Build.Reason)"
-              echo "Source Branch: $(Build.SourceBranch)"
-              echo "Target Branch: $(System.PullRequest.TargetBranch)"
-              echo "PR ID: $(System.PullRequest.PullRequestId)"
-              echo "Is this a PR build? $(System.PullRequest.IsPullRequest)"                        
-  - stage: FlywayMigrate
-    displayName: 'Flyway Database Migration'
-    condition: and(
-              succeeded(),
-              eq(variables['Build.SourceBranch'], 'refs/heads/main')
-      )
-    jobs:
-      - job: CheckMergeSourceAndMigrate
-        steps:
-          - checkout: self
-          - task: PowerShell@2
-            displayName: 'Check Merge Source Branch'
-            inputs:
-              targetType: 'inline'
-              script: |
-                git fetch --all
-                $lastCommitMessage = git log -1 --pretty=format:"%s"
-                Write-Host "Last commit message: $lastCommitMessage"
-                if ($lastCommitMessage -match "Merge pull request") {
-                      $fullMerge = git log -1 --pretty=format:"%b"
-                      Write-Host "Merge body: $fullMerge"
-                      if ($fullMerge -match "from .*custom") {
-                          Write-Host "✅ PR was merged from 'custom'. Proceeding with migration..."
-                      } else {
-                          Write-Host "❌ PR was NOT from 'custom'. Skipping migration."
-                          exit 0
-                }
-                } else {
-                    Write-Host "❌ Not a merge commit. Skipping migration."
-                    exit 0
-                }
           - task: PowerShell@2
             displayName: 'Run Flyway Migrate'
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "Flyway migrate triggered on merged PR (push to main branch)"
-                $flywayConfigPath = "$(Build.SourcesDirectory)\Database\MSSQL_Server\Dev\conf\flyway-dev.conf"
-                $migrateArgs = "migrate -configFiles=`"$flywayConfigPath`""
-                $process = Start-Process -FilePath flyway -ArgumentList $migrateArgs -NoNewWindow -PassThru -Wait
-                if ($process.ExitCode -ne 0) {
+               Write-Host "Flyway migrate triggered on merge/push to main branch."
+               & flyway migrate "-configFiles=$(FLYWAY_CONFIG_PATH)"
+               if ($LASTEXITCODE -ne 0) {
                   Write-Error "Flyway migrate failed."
                   exit 1
                 }
-                Write-Host "✅ Flyway migrate completed successfully." 
+                Write-Host "✅ Flyway migrate completed successfully."
+            env:
+              dbUser: $(dbUser)
+              dbPassword: $(dbPassword)
