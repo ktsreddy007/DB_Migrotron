@@ -202,22 +202,37 @@ stages:
                 $changedFilesRaw = git diff --diff-filter=AM --name-only origin/main origin/$sourceBranchName
                 $changedFiles = $changedFilesRaw -split "`n" | Where-Object { $_ -like "*.sql" }
                 $filteredFiles = $changedFiles | Where-Object { $_ -like "*Database/MSSQL_Server/Dev/migrations/*" }
-                $tableNames = foreach ($file in $filteredFiles) {
-                    $fullPath = Join-Path -Path "$(Build.SourcesDirectory)" -ChildPath $file
-                    if (Test-Path $fullPath) {
-                        $matches = Get-Content $fullPath |
-                        Select-String -Pattern "(?i)(create\s+table|insert\s+into)\s+(\[?\w+\]?\.)?\[?(?<table>\w+)\]?" -AllMatches
-                        foreach ($match in $matches.Matches) {
-                          $tableNames += $match.Groups["table"].Value 
+                $filteredFiles | ForEach-Object { Write-Host " - $_" }
+
+                $tableNames = @()
+                foreach ($file in $filteredFiles) {
+                        $fullPath = Join-Path -Path "$(Build.SourcesDirectory)" -ChildPath $file
+                        if (Test-Path $fullPath) {
+                            Write-Host "Processing file: $fullPath"
+                            $matches = Get-Content $fullPath |
+                            Select-String -Pattern "(?i)(create\s+table|insert\s+into)\s+((\[[^\]]+\]|\w+)\.)*((\[[^\]]+\]|\w+))" -AllMatches
+                            foreach ($match in $matches.Matches) {
+                                  $fullMatch = $match.Matches[0].Value
+                                  $parts = $fullMatch -split '\.'
+                                  $table = $parts[-1] -replace '\[|\]', ''  # Remove brackets
+                                  if ($table -and -not ($tableNames -contains $table)) {
+                                        $tableNames += $table
+                                        Write-Host "  → Found table: $table"
+                                  }
+                              }
+                        } else {
+                            Write-Host "File not found: $fullPath"
                           }
-                      }
-                    }
-                $tableNames = $tableNames | Sort-Object -Unique
-                $tableNames | Out-File -FilePath $tablesFile -Encoding utf8
+                        }
+                if ($tableNames.Count -eq 0) {
+                      Write-Host "No tables extracted from migration files."
+                    } else {
+                    $tableNames | Out-File -FilePath $tablesFile -Encoding utf8
+                }
                 Add-Content -Path $logFile -Value "=====BEFORE RECORD COUNT====="
                 Add-Content -Path $logFile -Value "RunID: $(Build.BuildId)"
                 foreach ($table in $tableNames) {
-                    try {
+                  try {
                         $query = "SELECT COUNT(*) FROM [$table]"
                         $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
                         $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString)
@@ -229,12 +244,12 @@ stages:
                         Add-Content -Path $logFile -Value "TableName : $table"
                         Add-Content -Path $logFile -Value "RecordsCount : $count"
                         Add-Content -Path $logFile -Value "Timestamp : $timestamp`n"
-                    } catch {
-                        $err = $_.Exception.Message
-                        Write-Host "Error fetching data for table ${table}: $_"
+                        Write-Host "✔ Table: $table | Records: $count"
+                      } catch {
+                          Write-Host "❌ Error fetching data for table [$table]: $($_.Exception.Message)"
+                        }
                     }
-                }
-                Add-Content -Path $logFile -Value "======MIGRATION START ==============="
+                  Add-Content -Path $logFile -Value "======MIGRATION START ==============="
             env:
               dbUser: $(dbUser)
               dbPassword: $(dbPassword)       
@@ -303,48 +318,48 @@ stages:
               dbUser: $(dbUser)
               dbPassword: $(dbPassword)
 ###################################################################
-  - stage: Postmigration_SQLLogger
-    displayName: "Post_SQL_Logger"
-    jobs:
-     - job: PostSQL_Logger
-       steps:
-         - task: PowerShell@2
-           displayName: 'Post-Migration Table Record Logger'
-           inputs:
-              targetType: 'inline'
-              script: |
-                $logFile = "$(LOG_FILE)"
-                $tablesFile = "$(TABLES_FILE)"
-                $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-                Add-Content -Path $logFile -Value "=====AFTER RECORD COUNT====="
-                Add-Content -Path $logFile -Value "RunID: $(Build.BuildId)"
-                if (-Not (Test-Path $tablesFile)) {
-                    Write-Error "UsedTables.txt not found. Cannot continue."
-                    exit 1
-                }
-                $tableNames = Get-Content $tablesFile | Sort-Object -Unique
-                foreach ($table in $tableNames) {
-                    try {
-                        $query = "SELECT COUNT(*) FROM [$table]"
-                        $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
-                        $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString)
-                        $command = $connection.CreateCommand()
-                        $command.CommandText = $query
-                        $connection.Open()
-                        $count = $command.ExecuteScalar()
-                        $connection.Close()
-                        Add-Content -Path $logFile -Value "TableName : $table"
-                        Add-Content -Path $logFile -Value "RecordsCount : $count"
-                        Add-Content -Path $logFile -Value "Timestamp : $timestamp`n"
-                      } catch {
-                        $err = $_.Exception.Message
-                        Write-Host "Error fetching data for table ${table}: $_"
-                      }
-                    }
-                Add-Content -Path $logFile -Value "=========MIGRATION COMPLETE =========`n"
-           env:
-             dbUser: $(dbUser)
-             dbPassword: $(dbPassword)
+#  - stage: Postmigration_SQLLogger
+#    displayName: "Post_SQL_Logger"
+#    jobs:
+#     - job: PostSQL_Logger
+#       steps:
+#         - task: PowerShell@2
+#           displayName: 'Post-Migration Table Record Logger'
+#           inputs:
+#              targetType: 'inline'
+#              script: |
+#                $logFile = "$(LOG_FILE)"
+#                $tablesFile = "$(TABLES_FILE)"
+#                $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+#                Add-Content -Path $logFile -Value "=====AFTER RECORD COUNT====="
+#                Add-Content -Path $logFile -Value "RunID: $(Build.BuildId)"
+#                if (-Not (Test-Path $tablesFile)) {
+#                    Write-Error "UsedTables.txt not found. Cannot continue."
+#                    exit 1
+#                }
+#                $tableNames = Get-Content $tablesFile | Sort-Object -Unique
+#                foreach ($table in $tableNames) {
+#                    try {
+#                        $query = "SELECT COUNT(*) FROM [$table]"
+#                        $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
+#                        $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString)
+#                        $command = $connection.CreateCommand()
+#                        $command.CommandText = $query
+#                        $connection.Open()
+#                        $count = $command.ExecuteScalar()
+#                        $connection.Close()
+#                        Add-Content -Path $logFile -Value "TableName : $table"
+#                        Add-Content -Path $logFile -Value "RecordsCount : $count"
+#                        Add-Content -Path $logFile -Value "Timestamp : $timestamp`n"
+#                      } catch {
+#                        $err = $_.Exception.Message
+#                        Write-Host "Error fetching data for table ${table}: $_"
+#                      }
+#                    }
+#                Add-Content -Path $logFile -Value "=========MIGRATION COMPLETE =========`n"
+#           env:
+#             dbUser: $(dbUser)
+#             dbPassword: $(dbPassword)
 ###################################################################
   - stage: Mappertb_updater
     displayName: "Migration_Rollback_Updater"
