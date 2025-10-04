@@ -1,2 +1,0 @@
-ALTER TABLE Payroll.dbo.NBtb
-ADD Status NVARCHAR(50) NOT NULL DEFAULT 'active';
