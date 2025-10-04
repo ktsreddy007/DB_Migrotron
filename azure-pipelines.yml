@@ -170,6 +170,8 @@ stages:
 ######################################################
   - stage: SQL_Linting
     displayName: "SQL_Syntax_Checker"
+    dependsOn: FlywayValidation
+    condition: succeeded()
     jobs:
      - job: SQL_Linting
        steps:
@@ -177,6 +179,8 @@ stages:
 ######################################################
   - stage: Premigration_SQLLogger
     displayName: "Pre_SQL_Logger"
+    dependsOn: SQL_Linting
+    condition: succeeded()
     jobs:
      - job: PreSQL_Logger
        steps:
@@ -366,6 +370,7 @@ stages:
   - stage: Mappertb_updater
     displayName: "Migration_Rollback_Updater"
     dependsOn: Flyway_Migration
+    condition: succeeded()
     jobs:
      - job: Updating_Mapper_Table
        steps:
