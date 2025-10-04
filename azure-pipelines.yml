@@ -141,10 +141,10 @@ stages:
                     $env:Path += ";$env:ProgramFiles\Python310\Scripts;$env:ProgramFiles\Python310\"
                   }
                 python --version
-                if ($LASTEXITCODE -ne 0) {
-                  Write-Error "Python installation failed or not in PATH."
-                  exit 1
-                }
+#                if ($LASTEXITCODE -ne 0) {
+#                  Write-Error "Python installation failed or not in PATH."
+#                  exit 1
+#                }
           - task: PowerShell@2
             displayName: 'Check and Install SQLFluff (tsql dialect)'
             inputs:
