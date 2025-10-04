@@ -1,2 +1,2 @@
-ALTER TABLE Payroll.dbo.OriTable
+ALTER TABLE Payroll.dbo.ManaTable
 ADD Status NVARCHAR(50) NOT NULL DEFAULT 'active';

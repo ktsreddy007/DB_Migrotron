@@ -7,7 +7,6 @@ pr:
   branches:
     include:
       - main
-
 pool:
   name: Self-Hosted   
 
@@ -20,7 +19,6 @@ variables:
   LOG_FOLDER: 'E:/DevOpsLogs'
   LOG_FILE: '$(LOG_FOLDER)/MigrationLog.txt'
   TABLES_FILE: '$(LOG_FOLDER)/UsedTables.txt'
-
 
 stages:
   - stage: CaptureRollbackScripts
@@ -71,7 +69,12 @@ stages:
                       Write-Host "DB connection opened."
                       foreach ($scriptPath in $rollbackScripts) {
                           $scriptName = [System.IO.Path]::GetFileName($scriptPath)
-                          Write-Host "Inserting rollback script: $scriptName"
+                          Write-Host "Processing rollback script: $scriptName"
+                          if ($scriptName -notmatch "^RB_V\d+__.+\.sql$") {
+                              Write-Error "Rollback script '$scriptName' does not follow naming convention 'RB_V<version>__<name>.sql'."
+                              exit 1
+                          }
+                          Write-Host "Inserting rollback script: $scriptName"    
                           $command = $connection.CreateCommand()
                           $command.CommandText = "INSERT INTO Payroll.dbo.migration_rollback_mapper (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url, build_id, pr_id) VALUES (@scriptName, @repoFolder, @repoUrl, @buildId, @prId)"
                           $command.Parameters.AddWithValue("@scriptName", $scriptName) | Out-Null
@@ -421,7 +424,6 @@ stages:
                   $getRollbackCmd.CommandText = "SELECT rollback_script_name FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = @prId AND build_id = @buildId"
                   $getRollbackCmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
                   $getRollbackCmd.Parameters.AddWithValue("@buildId", $buildId) | Out-Null
-                  
                   $reader = $getRollbackCmd.ExecuteReader()
                   $rollbackScripts = @()
                   while ($reader.Read()) {
@@ -429,37 +431,44 @@ stages:
                   }
                   $reader.Close()
                   foreach ($rollbackFile in $rollbackScripts) {
-                    $baseName = [System.IO.Path]::GetFileNameWithoutExtension($rollbackFile).ToLower() -replace "^rb__",""
-                    $migrationCmd = $connection.CreateCommand()
-                    $migrationCmd.CommandText = "SELECT TOP 1 version, script FROM flyway_schema_history WHERE success = 1 AND script COLLATE SQL_Latin1_General_CP1_CI_AS LIKE '%__' + @baseName + '.sql' ORDER BY installed_on DESC"
-                    $migrationCmd.Parameters.AddWithValue("@baseName", $baseName) | Out-Null
-                    $migrationReader = $migrationCmd.ExecuteReader()
-                    if ($migrationReader.Read()) {
-                        $version = $migrationReader["version"]
-                        $script = $migrationReader["script"]
-                        $migrationReader.Close()
+                    $fileName = [System.IO.Path]::GetFileNameWithoutExtension($rollbackFile)
+                    if ($fileName -match "^RB_V(\d+)__(.+)$") {
+                      $version = $matches[1]
+                      $feature = $matches[2]
+                      $migrationScript = "V$version`__$feature.sql"
+                      $migrationCmd = $connection.CreateCommand()
+                      $migrationCmd.CommandText = "SELECT COUNT(1) FROM flyway_schema_history WHERE success = 1 AND version = @version AND script = @script"
+                      $migrationCmd.Parameters.AddWithValue("@version", $version) | Out-Null
+                      $migrationCmd.Parameters.AddWithValue("@script", $migrationScript) | Out-Null
+                      $count = $migrationCmd.ExecuteScalar()
+                      if ($count -gt 0) {
                         $updateCmd = $connection.CreateCommand()
-                        $updateCmd.CommandText = "UPDATE Payroll.dbo.migration_rollback_mapper SET migration_version = @version, migration_script = @script WHERE pr_id = @prId AND build_id = @buildId AND rollback_script_name = @rollbackName"
+                        $updateCmd.CommandText = @"
+                                                 UPDATE Payroll.dbo.migration_rollback_mapper
+                                                 SET migration_version = @version, migration_script = @script
+                                                 WHERE pr_id = @prId AND build_id = @buildId AND rollback_script_name = @rollbackName
+                                                "@
                         $updateCmd.Parameters.AddWithValue("@version", $version) | Out-Null
-                        $updateCmd.Parameters.AddWithValue("@script", $script) | Out-Null
+                        $updateCmd.Parameters.AddWithValue("@script", $migrationScript) | Out-Null
                         $updateCmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
                         $updateCmd.Parameters.AddWithValue("@buildId", $buildId) | Out-Null
                         $updateCmd.Parameters.AddWithValue("@rollbackName", $rollbackFile) | Out-Null
                         $updated = $updateCmd.ExecuteNonQuery()
                         Write-Host "Updated $updated record(s) for '$rollbackFile' with version '$version'"
+                        } else {
+                            Write-Host "No matching migration found for rollback script '$rollbackFile'"
+                        }
                     } else {
-                        $migrationReader.Close()
-                        Write-Host "No migration found for rollback script '$rollbackFile'"
-                      }
+                        Write-Host "Rollback script name '$fileName' does not match expected pattern 'RB_V<version>__<feature>.sql'"
                 }
                 $connection.Close()
                 } catch {
                     Write-Error "Error updating rollback mapper: $_"
                     exit 1
-                }             
+                }
           env:
-              dbUser: $(dbUser)
-              dbPassword: $(dbPassword)
+            dbUser: $(dbUser)
+            dbPassword: $(dbPassword)
 ###################################################################
   - stage: Postmigration_Flyway_Validator
     dependsOn: Flyway_Migration
