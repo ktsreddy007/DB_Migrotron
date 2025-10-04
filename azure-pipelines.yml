@@ -150,14 +150,25 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                if (Get-Command sqlfluff -ErrorAction SilentlyContinue) {
-                    Write-Host "SQLFluff is already installed."
-                } else {
-                  Write-Host "Installing SQLFluff..."
-                  python -m pip install --upgrade pip
-                  pip install sqlfluff
-                  }
-                sqlfluff --version        
+                $userBase = python -m site --user-base
+                $scriptsPath = Join-Path $userBase 'Scripts'
+                Write-Host "Adding to PATH: $scriptsPath"
+                $env:PATH = "$scriptsPath;$env:PATH"
+                $sqlfluffCmd = Get-Command sqlfluff -ErrorAction SilentlyContinue
+                if ($null -ne $sqlfluffCmd) {
+                    Write-Host "sqlfluff installed at: $($sqlfluffCmd.Source)"
+                    try {
+                      $version = sqlfluff --version
+                      Write-Host "sqlfluff version: $version"
+                    } catch {
+                      Write-Error "sqlfluff command failed even though it exists."
+                      exit 1
+                    } else {
+                      Write-Error "sqlfluff is not installed or not in PATH. Failing pipeline."
+                      exit 1
+                    }
+                }      
+
 ######################################################
   - stage: FlywayValidation
     dependsOn: PrepareEnvironment
