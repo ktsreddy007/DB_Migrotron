@@ -83,7 +83,6 @@ stages:
                           Write-Host "Inserted into DB: $scriptName"
                     }
                     $connection.Close()
-                    Write-Host "Inserted into DB: $scriptName"
                 } catch {
                     Write-Error "An error occurred: $_"
                     exit 1
@@ -210,7 +209,7 @@ stages:
                 $sourceBranch = "$(System.PullRequest.SourceBranch)"
                 $sourceBranchName = $sourceBranch -replace 'refs/heads/', ''
                 git fetch origin
-                $changedFilesRaw = git diff --diff-filter=AM --name-only origin/main origin/$sourceBranchName
+                $changedFilesRaw = git diff --diff-filter=AMCR --name-only origin/main origin/$sourceBranchName
                 $changedFiles = $changedFilesRaw -split "`n" | Where-Object { $_ -like "*.sql" }
                 $filteredFiles = $changedFiles | Where-Object { $_ -like "*Database/MSSQL_Server/Dev/migrations/*" }
                 $filteredFiles | ForEach-Object { Write-Host " - $_" }
@@ -224,9 +223,9 @@ stages:
                             Select-String -Pattern "(?i)(create\s+table|insert\s+into)\s+((\[[^\]]+\]|\w+)\.)*((\[[^\]]+\]|\w+))" -AllMatches
                             foreach ($matchInfo in $matches) {
                                   foreach ($match in $matchInfo.Matches) {
-                                      $fullMatch = $match.Value  # UPDATED: No longer indexing into null array
+                                      $fullMatch = $match.Value  
                                       $parts = $fullMatch -split '\.'
-                                      $table = $parts[-1] -replace '\[|\]', ''  # Remove brackets
+                                      $table = $parts[-1] -replace '\[|\]', ''
                                       if ($table -and -not ($tableNames -contains $table)) {
                                           $tableNames += $table
                                           Write-Host "  → Found table: $table"
@@ -246,7 +245,16 @@ stages:
                 Add-Content -Path $logFile -Value "RunID: $(Build.BuildId)"
                 foreach ($table in $tableNames) {
                   try {
-                        $query = "SELECT COUNT(*) FROM [$table]"
+                        $schema = "dbo"
+                        $tableName = $table
+                        if ($table -match "^\[(.+?)\]\.\[(.+?)\]$") {
+                            $schema = $matches[1]
+                            $tableName = $matches[2]
+                        } elseif ($table -match "^(.+?)\.(.+?)$") {
+                            $schema = $matches[1]
+                            $tableName = $matches[2]
+                          }
+                        $query = "IF OBJECT_ID('$schema.$tableName', 'U') IS NOT NULL SELECT COUNT(*) FROM [$schema].[$tableName] ELSE SELECT -1"
                         $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
                         $connection = New-Object System.Data.SqlClient.SqlConnection($connectionString)
                         $command = $connection.CreateCommand()
@@ -254,12 +262,21 @@ stages:
                         $connection.Open()
                         $count = $command.ExecuteScalar()
                         $connection.Close()
-                        Add-Content -Path $logFile -Value "TableName : $table"
-                        Add-Content -Path $logFile -Value "RecordsCount : $count"
+                        
+                        if ($count -eq -1) {
+                          Add-Content -Path $logFile -Value "TableName : $table"
+                          Add-Content -Path $logFile -Value "RecordsCount : No Table / New Table"
+                        } else {
+                          Add-Content -Path $logFile -Value "TableName : $table"
+                          Add-Content -Path $logFile -Value "RecordsCount : $count" 
+                          }
                         Add-Content -Path $logFile -Value "Timestamp : $timestamp`n"
-                        Write-Host "Table: $table | Records: $count"
+                        Write-Host "Table: $table | Records: $(if ($count -eq -1) {'No Table / New Table'} else {$count})"
                       } catch {
-                          Write-Host "Error fetching data for table [$table]: $($_.Exception.Message)"
+                          Write-Host "Unexpected error checking table [$table]: $($_.Exception.Message)"
+                          Add-Content -Path $logFile -Value "TableName : $table"
+                          Add-Content -Path $logFile -Value "RecordsCount : Error - $($_.Exception.Message)"
+                          Add-Content -Path $logFile -Value "Timestamp : $timestamp`n"
                         }
                     }
                   Add-Content -Path $logFile -Value "======MIGRATION START ==============="
