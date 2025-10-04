@@ -128,6 +128,36 @@ stages:
                     $env:Path = "$flywayPath;$env:Path"
                     Write-Host "Flyway CLI installed successfully."
                   }
+          - task: PowerShell@2
+            displayName: 'Check and Install Python (via Chocolatey)'
+            inputs:
+              targetType: 'inline'
+              script: |
+                if (Get-Command python -ErrorAction SilentlyContinue) {
+                    Write-Host "Python is already installed."
+                } else {
+                    Write-Host "Installing Python 3 via Chocolatey..."
+                    choco install -y python
+                    $env:Path += ";$env:ProgramFiles\Python310\Scripts;$env:ProgramFiles\Python310\"
+                  }
+                python --version
+                if ($LASTEXITCODE -ne 0) {
+                  Write-Error "Python installation failed or not in PATH."
+                  exit 1
+                }
+          - task: PowerShell@2
+            displayName: 'Check and Install SQLFluff (tsql dialect)'
+            inputs:
+              targetType: 'inline'
+              script: |
+                if (Get-Command sqlfluff -ErrorAction SilentlyContinue) {
+                    Write-Host "SQLFluff is already installed."
+                } else {
+                  Write-Host "Installing SQLFluff..."
+                  python -m pip install --upgrade pip
+                  pip install sqlfluff
+                  }
+                sqlfluff --version        
 ######################################################
   - stage: FlywayValidation
     dependsOn: PrepareEnvironment
