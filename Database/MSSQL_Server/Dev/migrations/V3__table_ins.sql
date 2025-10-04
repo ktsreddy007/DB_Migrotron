@@ -1,4 +1,4 @@
-INSERT INTO Payroll.dbo.OriTable (Username, Email, Status)
+INSERT INTO Payroll.dbo.ManaTable (Username, Email, Status)
 VALUES 
 ('admin', 'admin@example.com','active'),
 ('user1', 'user1@example.com','inactive'),
