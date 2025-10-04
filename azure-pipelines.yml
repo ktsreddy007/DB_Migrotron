@@ -413,59 +413,61 @@ stages:
               targetType: 'inline'
               script: |
                 try {
-                  $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$(dbUser);Password=$(dbPassword);"
-                  [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
-                  $connection = New-Object System.Data.SqlClient.SqlConnection
-                  $connection.ConnectionString = $connectionString
-                  $connection.Open()
-                  $prId = "$(System.PullRequest.PullRequestId)"
-                  $buildId = "$(Build.BuildId)"
-                  $getRollbackCmd = $connection.CreateCommand()
-                  $getRollbackCmd.CommandText = "SELECT rollback_script_name FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = @prId AND build_id = @buildId"
-                  $getRollbackCmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
-                  $getRollbackCmd.Parameters.AddWithValue("@buildId", $buildId) | Out-Null
-                  $reader = $getRollbackCmd.ExecuteReader()
-                  $rollbackScripts = @()
-                  while ($reader.Read()) {
+                    $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$(dbUser);Password=$(dbPassword);"
+                    [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
+                    $connection = New-Object System.Data.SqlClient.SqlConnection
+                    $connection.ConnectionString = $connectionString
+                    $connection.Open()
+                    $prId = "$(System.PullRequest.PullRequestId)"
+                    $buildId = "$(Build.BuildId)"
+                    $getRollbackCmd = $connection.CreateCommand()
+                    $getRollbackCmd.CommandText = "SELECT rollback_script_name FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = @prId AND build_id = @buildId"
+                    $getRollbackCmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
+                    $getRollbackCmd.Parameters.AddWithValue("@buildId", $buildId) | Out-Null
+                    $reader = $getRollbackCmd.ExecuteReader()
+                    $rollbackScripts = @()
+                    while ($reader.Read()) 
+                    {
                       $rollbackScripts += $reader["rollback_script_name"]
-                  }
-                  $reader.Close()
-                  foreach ($rollbackFile in $rollbackScripts) {
-                    $fileName = [System.IO.Path]::GetFileNameWithoutExtension($rollbackFile)
-                    if ($fileName -match "^RB_V(\d+)__(.+)$") {
-                      $version = $matches[1]
-                      $feature = $matches[2]
-                      $migrationScript = "V$version`__$feature.sql"
-                      $migrationCmd = $connection.CreateCommand()
-                      $migrationCmd.CommandText = "SELECT COUNT(1) FROM flyway_schema_history WHERE success = 1 AND version = @version AND script = @script"
-                      $migrationCmd.Parameters.AddWithValue("@version", $version) | Out-Null
-                      $migrationCmd.Parameters.AddWithValue("@script", $migrationScript) | Out-Null
-                      $count = $migrationCmd.ExecuteScalar()
-                      if ($count -gt 0) {
-                        $updateCmd = $connection.CreateCommand()
-                        $updateCmd.CommandText = @"
-                                                 UPDATE Payroll.dbo.migration_rollback_mapper
-                                                 SET migration_version = @version, migration_script = @script
-                                                 WHERE pr_id = @prId AND build_id = @buildId AND rollback_script_name = @rollbackName
-                                                "@
-                        $updateCmd.Parameters.AddWithValue("@version", $version) | Out-Null
-                        $updateCmd.Parameters.AddWithValue("@script", $migrationScript) | Out-Null
-                        $updateCmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
-                        $updateCmd.Parameters.AddWithValue("@buildId", $buildId) | Out-Null
-                        $updateCmd.Parameters.AddWithValue("@rollbackName", $rollbackFile) | Out-Null
-                        $updated = $updateCmd.ExecuteNonQuery()
-                        Write-Host "Updated $updated record(s) for '$rollbackFile' with version '$version'"
+                    }
+                    $reader.Close()
+                    foreach ($rollbackFile in $rollbackScripts) {
+                      $fileName = [System.IO.Path]::GetFileNameWithoutExtension($rollbackFile)
+                      if ($fileName -match "^RB__V(\d+)__(.+)$") 
+                      {
+                        $version = $matches[1]
+                        $feature = $matches[2]
+                        $migrationScript = "V$version`__$feature.sql"
+                        $migrationCmd = $connection.CreateCommand()
+                        $migrationCmd.CommandText = "SELECT COUNT(1) FROM flyway_schema_history WHERE success = 1 AND version = @version AND script = @script"
+                        $migrationCmd.Parameters.AddWithValue("@version", $version) | Out-Null
+                        $migrationCmd.Parameters.AddWithValue("@script", $migrationScript) | Out-Null
+                        $count = $migrationCmd.ExecuteScalar()
+                        if ($count -gt 0) {
+                          $updateCmd = $connection.CreateCommand()
+                          $updateCmd.CommandText = "UPDATE Payroll.dbo.migration_rollback_mapper SET migration_version = @version, migration_script = @script WHERE pr_id = @prId AND build_id = @buildId AND rollback_script_name = @rollbackName"                        
+                          $updateCmd.Parameters.AddWithValue("@version", $version) | Out-Null
+                          $updateCmd.Parameters.AddWithValue("@script", $migrationScript) | Out-Null
+                          $updateCmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
+                          $updateCmd.Parameters.AddWithValue("@buildId", $buildId) | Out-Null
+                          $updateCmd.Parameters.AddWithValue("@rollbackName", $rollbackFile) | Out-Null
+                          $updated = $updateCmd.ExecuteNonQuery()
+                          Write-Host "Updated $updated record(s) for '$rollbackFile' with version '$version'"
                         } else {
                             Write-Host "No matching migration found for rollback script '$rollbackFile'"
+                          }
+                      } else {
+                          Write-Host "Rollback script name '$fileName' does not match expected pattern 'RB__V<version>__<feature>.sql'"
                         }
-                    } else {
-                        Write-Host "Rollback script name '$fileName' does not match expected pattern 'RB_V<version>__<feature>.sql'"
-                }
-                $connection.Close()
+                    }        
+                    $connection.Close()
                 } catch {
                     Write-Error "Error updating rollback mapper: $_"
-                    exit 1
-                }
+                    if ($connection.State -eq 'Open') {
+                      $connection.Close()
+                    }
+                    exit 1 
+                  }
           env:
             dbUser: $(dbUser)
             dbPassword: $(dbPassword)
