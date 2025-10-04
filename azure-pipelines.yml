@@ -211,15 +211,17 @@ stages:
                             Write-Host "Processing file: $fullPath"
                             $matches = Get-Content $fullPath |
                             Select-String -Pattern "(?i)(create\s+table|insert\s+into)\s+((\[[^\]]+\]|\w+)\.)*((\[[^\]]+\]|\w+))" -AllMatches
-                            foreach ($match in $matches.Matches) {
-                                  $fullMatch = $match.Matches[0].Value
-                                  $parts = $fullMatch -split '\.'
-                                  $table = $parts[-1] -replace '\[|\]', ''  # Remove brackets
-                                  if ($table -and -not ($tableNames -contains $table)) {
-                                        $tableNames += $table
-                                        Write-Host "  → Found table: $table"
+                            foreach ($matchInfo in $matches) {
+                                  foreach ($match in $matchInfo.Matches) {
+                                      $fullMatch = $match.Value  # UPDATED: No longer indexing into null array
+                                      $parts = $fullMatch -split '\.'
+                                      $table = $parts[-1] -replace '\[|\]', ''  # Remove brackets
+                                      if ($table -and -not ($tableNames -contains $table)) {
+                                          $tableNames += $table
+                                          Write-Host "  → Found table: $table"
+                                      }
                                   }
-                              }
+                            }          
                         } else {
                             Write-Host "File not found: $fullPath"
                           }
@@ -244,9 +246,9 @@ stages:
                         Add-Content -Path $logFile -Value "TableName : $table"
                         Add-Content -Path $logFile -Value "RecordsCount : $count"
                         Add-Content -Path $logFile -Value "Timestamp : $timestamp`n"
-                        Write-Host "✔ Table: $table | Records: $count"
+                        Write-Host "Table: $table | Records: $count"
                       } catch {
-                          Write-Host "❌ Error fetching data for table [$table]: $($_.Exception.Message)"
+                          Write-Host "Error fetching data for table [$table]: $($_.Exception.Message)"
                         }
                     }
                   Add-Content -Path $logFile -Value "======MIGRATION START ==============="
