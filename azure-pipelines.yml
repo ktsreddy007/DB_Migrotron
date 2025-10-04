@@ -47,25 +47,31 @@ stages:
                       $sourceBranch = "$(System.PullRequest.SourceBranch)"
                       $sourceBranchName = $sourceBranch -replace 'refs/heads/', ''
                       Write-Host "Source branch: $sourceBranchName"
-                      git fetch origin
-                      $changedFilesRaw = git diff --diff-filter=AM --name-only origin/main origin/$sourceBranchName
+                      git fetch origin +refs/heads/*:refs/remotes/origin/*
+                      $changedFilesRaw = git diff --diff-filter=AMCR --name-only origin/main origin/$sourceBranchName
+                      Write-Host "Raw changed files:`n$changedFilesRaw"
                       $changedFiles = $changedFilesRaw -split "`n" | Where-Object { $_ -ne "" }
+                      Write-Host "Filtered changed files:`n$($changedFiles -join "`n")" 
                       if (-not $changedFiles -or $changedFiles.Count -eq 0) {
                             Write-Host "No changed files detected. Exiting."
                             exit 0
                       }
                       $rollbackScripts = $changedFiles | Where-Object { $_ -like "*Database/MSSQL_Server/Dev/rollback_sql/*.sql" }
+                      Write-Host "Rollback scripts detected:`n$($rollbackScripts -join "`n")" 
                       if (-not $rollbackScripts -or $rollbackScripts.Count -eq 0) {
                             Write-Host "No rollback scripts found. Exiting job."
                             exit 0
                       }
+                      Write-Host "Connecting to DB server: $(DB_SERVER), Database: $(DB_NAME)"      
                       [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
                       $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
                       $connection = New-Object System.Data.SqlClient.SqlConnection
                       $connection.ConnectionString = $connectionString
                       $connection.Open()
+                      Write-Host "DB connection opened."
                       foreach ($scriptPath in $rollbackScripts) {
                           $scriptName = [System.IO.Path]::GetFileName($scriptPath)
+                          Write-Host "Inserting rollback script: $scriptName"
                           $command = $connection.CreateCommand()
                           $command.CommandText = "INSERT INTO Payroll.dbo.migration_rollback_mapper (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url, build_id, pr_id) VALUES (@scriptName, @repoFolder, @repoUrl, @buildId, @prId)"
                           $command.Parameters.AddWithValue("@scriptName", $scriptName) | Out-Null
@@ -77,6 +83,7 @@ stages:
                           Write-Host "Inserted into DB: $scriptName"
                     }
                     $connection.Close()
+                    Write-Host "Inserted into DB: $scriptName"
                 } catch {
                     Write-Error "An error occurred: $_"
                     exit 1
