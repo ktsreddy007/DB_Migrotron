@@ -153,7 +153,7 @@ stages:
                 $userBase = python -m site --user-base
                 $scriptsPath = Join-Path $userBase 'Scripts'
                 Write-Host "##vso[task.setvariable variable=SQLFLUFF_PATH]$scriptsPath"
-                Write-Host "SQLFLUFF_PATH = $(SQLFLUFF_PATH)"
+                Write-Host "SQLFLUFF_PATH = $env:SQLFLUFF_PATH" 
                 Write-Host "Adding to PATH: $scriptsPath"
                 $env:PATH = "$scriptsPath;$env:PATH"
                 $sqlfluffCmd = Get-Command sqlfluff -ErrorAction SilentlyContinue
