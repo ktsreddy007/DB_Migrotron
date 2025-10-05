@@ -163,10 +163,11 @@ stages:
                     } catch {
                         Write-Error "sqlfluff command failed even though it exists."
                         exit 1
-                } else {
+                  } else {
                          Write-Error "sqlfluff is not installed or not in PATH. Failing pipeline."
                          exit 1
-                       } 
+                       }
+                }          
 ######################################################
   - stage: FlywayValidation
     dependsOn: PrepareEnvironment
