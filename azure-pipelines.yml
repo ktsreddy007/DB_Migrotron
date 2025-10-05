@@ -383,7 +383,10 @@ stages:
               script: |
                Write-Host "Connecting to DB server: $(DB_SERVER), Database: $(DB_NAME)"
                [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
-               $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
+               $dbUser = $env:dbUser
+               $dbPassword = $env:dbPassword
+
+               $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$dbUser;Password=$dbPassword;"
                $connection = New-Object System.Data.SqlClient.SqlConnection
                $connection.ConnectionString = $connectionString
                $connection.Open()
@@ -394,10 +397,12 @@ stages:
                $command.CommandText = $sqlQuery
                $tableCount = $command.ExecuteScalar()
                Write-Host "Table count result: $tableCount"
+               $flywayUser = $env:dbUser
+               $flywayPassword = $env:dbPassword
                if ($tableCount -eq 0) {
                   Write-Host "Table '$tableName' does not exist."
                   Write-Host "Running flyway baseline before migrate with baselineVersion=0..."
-                  & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" baseline -baselineVersion=0 -user=$env:dbUser -password=$env:dbPassword
+                  & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" baseline -baselineVersion=0 -user=$flywayUser -password=$flywayPassword
                   if ($LASTEXITCODE -ne 0) {
                     Write-Error "Flyway baseline failed."
                     $connection.Close()
@@ -408,7 +413,7 @@ stages:
                   Write-Host "Table '$tableName' exists."
                 }
                Write-Host "Flyway migrate triggered on merge/push to main branch."
-               & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" migrate -user=$env:dbUser -password=$env:dbPassword
+               & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" migrate -user=$flywayUser -password=$flywayPassword
                if ($LASTEXITCODE -ne 0) {
                   Write-Error "Flyway migrate failed."
                   $connection.Close()
