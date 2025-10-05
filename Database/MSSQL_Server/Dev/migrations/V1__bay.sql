@@ -1,7 +1,7 @@
 -- Create the 'users' table
 IF NOT EXISTS (
     SELECT * FROM INFORMATION_SCHEMA.TABLES
-    WHERE TABLE_NAME = 'Payroll.dbo.sar' AND TABLE_SCHEMA = 'dbo'
+    WHERE TABLE_NAME = 'Payroll.dbo.bar' AND TABLE_SCHEMA = 'dbo'
 )
 BEGIN
 CREATE TABLE Payroll.dbo.sar (
