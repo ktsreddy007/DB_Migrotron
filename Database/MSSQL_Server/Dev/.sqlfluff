@@ -1,19 +1,16 @@
 [sqlfluff]
 dialect = tsql
-exclude_rules = L009, L029, L034  # Avoid stricter rules for now
-#templater = jinja  # Safe default
-
-[sqlfluff:rules]
+exclude_rules = CP01, CP02, LT04  # Replacing L009, L029, L034 equivalents
 max_line_length = 120
 
-[sqlfluff:rules:L003]
+[sqlfluff:indentation]
 tab_space_size = 4
 
-[sqlfluff:rules:L010]
+[sqlfluff:rules:capitalisation.keywords]
 capitalisation_policy = consistent
 
-[sqlfluff:rules:L014]
+[sqlfluff:rules:capitalisation.identifiers]
 extended_capitalisation_policy = consistent
 
-[sqlfluff:rules:L019]
+[sqlfluff:rules:layout.commas]
 comma_style = trailing

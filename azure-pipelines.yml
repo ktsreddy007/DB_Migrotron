@@ -150,13 +150,16 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                $userBase = python -m site --user-base
-                $scriptsPath = Join-Path $userBase 'Scripts'
+                $scriptsPath = python -c "import site, os; print(os.path.join(site.USER_BASE, 'Scripts'))"
                 Write-Host "Scripts Path: $scriptsPath"
                 $env:PATH = "$scriptsPath;$env:PATH"
                 Write-Host "PATH: $env:PATH"
-                Write-Host "Contents of Scripts directory:"
-                Get-ChildItem $scriptsPath | ForEach-Object { Write-Host $_.Name }
+                if (Test-Path $scriptsPath) {
+                  Write-Host "Contents of Scripts directory:"
+                  Get-ChildItem $scriptsPath | ForEach-Object { Write-Host $_.Name }
+                } else {
+                    Write-Warning "Scripts path does not exist: $scriptsPath"
+                  }
                 $sqlfluffCmd = Get-Command sqlfluff -ErrorAction SilentlyContinue
                 if ($null -ne $sqlfluffCmd) {
                   Write-Host "sqlfluff already installed at: $($sqlfluffCmd.Source)"
@@ -167,7 +170,7 @@ stages:
                       Write-Error "sqlfluff command exists but failed to run."
                       exit 1
                     }
-                } else {
+                } else {  
                     Write-Host "sqlfluff not found. Installing with tsql dialect..."
                     python -m pip install --user --upgrade "sqlfluff[tsql]"
                     $sqlfluffExe = Join-Path $scriptsPath 'sqlfluff.exe'
@@ -177,8 +180,8 @@ stages:
                         $version = & $sqlfluffExe --version
                         Write-Host "sqlfluff version: $version"
                       } catch {
-                        Write-Error "sqlfluff executable found but failed to run."
-                        exit 1
+                          Write-Error "sqlfluff executable found but failed to run."
+                          exit 1
                         }
                     } else {
                         Write-Error "sqlfluff is not installed or not in PATH. Failing pipeline."
@@ -199,6 +202,9 @@ stages:
             targetType: 'inline'
             script: |
               $ErrorActionPreference = "Stop"
+              $scriptsPath = python -c "import site, os; print(os.path.join(site.USER_BASE, 'Scripts'))"
+              $env:PATH = "$scriptsPath;$env:PATH"
+              Write-Host "Using Scripts Path: $scriptsPath"  
               if (-Not (Test-Path -Path "$(SQL_FLUFFS_REPORTS)")) {
                 New-Item -ItemType Directory -Path "$(SQL_FLUFFS_REPORTS)" | Out-Null
                 Write-Host "Created folder: $(SQL_FLUFFS_REPORTS)"
@@ -216,11 +222,9 @@ stages:
               $changedFiles | ForEach-Object { Write-Host " - $_" }
               $fileList = $changedFiles -join " "
               $reportPath = "$(SQL_FLUFF_OUTPUT_FILE)"
-              $env:PATH = "$(SQLFLUFF_PATH);$env:PATH"
-              Write-Host "Updated PATH: $env:PATH"
               Write-Host "Running SQLFluff lint..."
               sqlfluff lint $fileList --config "$(SQL_FLUFF_CONFIG)" --format junit --nocolor > $reportPath
-              Write-Host "📄 SQLFluff report generated at: $reportPath"
+              Write-Host "SQLFluff report generated at: $reportPath"
         - task: PublishTestResults@2
           displayName: "Publish SQLFluff Test Results"
           inputs:
@@ -633,4 +637,3 @@ stages:
             env:
               dbUser: $(dbUser_1)
               dbPassword: $(dbPassword)
-         
