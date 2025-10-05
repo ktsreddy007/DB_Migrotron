@@ -181,7 +181,7 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$(dbUser);Password=$(dbPassword);"
+                $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
                 [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
                 $connection = New-Object System.Data.SqlClient.SqlConnection
                 $connection.ConnectionString = $connectionString
@@ -385,7 +385,6 @@ stages:
                [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
                $dbUser = $env:dbUser
                $dbPassword = $env:dbPassword
-
                $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$dbUser;Password=$dbPassword;"
                $connection = New-Object System.Data.SqlClient.SqlConnection
                $connection.ConnectionString = $connectionString
@@ -486,7 +485,7 @@ stages:
               targetType: 'inline'
               script: |
                 try {
-                    $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$(dbUser);Password=$(dbPassword);"
+                    $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
                     [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
                     $connection = New-Object System.Data.SqlClient.SqlConnection
                     $connection.ConnectionString = $connectionString
