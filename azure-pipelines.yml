@@ -152,30 +152,33 @@ stages:
               script: |
                 $userBase = python -m site --user-base
                 $scriptsPath = Join-Path $userBase 'Scripts'
+                Write-Host "##vso[task.setvariable variable=SQLFLUFF_PATH]$scriptsPath"
+                Write-Host "SQLFLUFF_PATH = $env:SQLFLUFF_PATH" 
                 Write-Host "Adding to PATH: $scriptsPath"
                 $env:PATH = "$scriptsPath;$env:PATH"
                 $sqlfluffCmd = Get-Command sqlfluff -ErrorAction SilentlyContinue
                 if ($null -ne $sqlfluffCmd) {
-                    Write-Host "sqlfluff already installed at: $($sqlfluffCmd.Source)"
-                    try {
+                  Write-Host "sqlfluff already installed at: $($sqlfluffCmd.Source)"
+                  try {
                       $version = sqlfluff --version
                       Write-Host "sqlfluff version: $version"
-                    } catch {
+                  } catch {
                         Write-Error "sqlfluff command exists but failed to run."
                         exit 1
-                  } else {
-                        Write-Host "sqlfluff not found. Installing with tsql dialect..."
-                        python -m pip install --user --upgrade "sqlfluff[tsql]"
-                        $sqlfluffCmd = Get-Command sqlfluff -ErrorAction SilentlyContinue
-                        if ($null -ne $sqlfluffCmd) {
-                          Write-Host "sqlfluff successfully installed at: $($sqlfluffCmd.Source)"
-                          $version = sqlfluff --version
-                          Write-Host "sqlfluff version: $version"
-                        } 
+                      } 
+                } else {
+                    Write-Host "sqlfluff not found. Installing with tsql dialect..."
+                    python -m pip install --user --upgrade "sqlfluff[tsql]"
+                    $sqlfluffCmd = Get-Command sqlfluff -ErrorAction SilentlyContinue
+                    if ($null -ne $sqlfluffCmd) {
+                      Write-Host "sqlfluff successfully installed at: $($sqlfluffCmd.Source)"
+                      $version = sqlfluff --version
+                      Write-Host "sqlfluff version: $version"
+                    } else {
                         Write-Error "sqlfluff is not installed or not in PATH. Failing pipeline."
-                         exit 1
-                       }
-                }                    
+                        exit 1
+                      }     
+                  }         
 ######################################################
   - stage: SQL_Linting
     displayName: "SQL_Syntax_Checker"
@@ -207,6 +210,8 @@ stages:
               $changedFiles | ForEach-Object { Write-Host " - $_" }
               $fileList = $changedFiles -join " "
               $reportPath = "$(SQL_FLUFF_OUTPUT_FILE)"
+              $env:PATH = "$(SQLFLUFF_PATH);$env:PATH"
+              Write-Host "Updated PATH: $env:PATH"
               Write-Host "Running SQLFluff lint..."
               sqlfluff lint $fileList --config "$(SQL_FLUFF_CONFIG)" --format junit --nocolor > $reportPath
               Write-Host "📄 SQLFluff report generated at: $reportPath"
