@@ -22,7 +22,7 @@ variables:
   TABLES_FILE: '$(LOG_FOLDER)/Tables_list.txt'
   SQL_FLUFF_CONFIG: '$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/.sqlfluff'
   SQL_FLUFFS_REPORTS: '$(Build.ArtifactStagingDirectory)/SQLFluff_Reports'
-  SQL_FLUFF_OUTPUT_FILE: '$(SQL_FLUFF_REPORTS)/sqlfluff_pr_$(System.PullRequest.PullRequestId).xml'
+  SQL_FLUFF_OUTPUT_FILE: '$(SQL_FLUFFS_REPORTS)/sqlfluff_pr_$(System.PullRequest.PullRequestId).xml'
 
 stages:
   - stage: CaptureRollbackScripts
@@ -156,15 +156,23 @@ stages:
                 $env:PATH = "$scriptsPath;$env:PATH"
                 $sqlfluffCmd = Get-Command sqlfluff -ErrorAction SilentlyContinue
                 if ($null -ne $sqlfluffCmd) {
-                    Write-Host "sqlfluff installed at: $($sqlfluffCmd.Source)"
+                    Write-Host "sqlfluff already installed at: $($sqlfluffCmd.Source)"
                     try {
                       $version = sqlfluff --version
                       Write-Host "sqlfluff version: $version"
                     } catch {
-                        Write-Error "sqlfluff command failed even though it exists."
+                        Write-Error "sqlfluff command exists but failed to run."
                         exit 1
                   } else {
-                         Write-Error "sqlfluff is not installed or not in PATH. Failing pipeline."
+                        Write-Host "sqlfluff not found. Installing with tsql dialect..."
+                        python -m pip install --user --upgrade "sqlfluff[tsql]"
+                        $sqlfluffCmd = Get-Command sqlfluff -ErrorAction SilentlyContinue
+                        if ($null -ne $sqlfluffCmd) {
+                          Write-Host "sqlfluff successfully installed at: $($sqlfluffCmd.Source)"
+                          $version = sqlfluff --version
+                          Write-Host "sqlfluff version: $version"
+                        } 
+                        Write-Error "sqlfluff is not installed or not in PATH. Failing pipeline."
                          exit 1
                        }
                 }                    
@@ -207,7 +215,7 @@ stages:
           inputs:
             testResultsFormat: 'JUnit'
             testResultsFiles: '$(SQL_FLUFF_OUTPUT_FILE)'
-            searchFolder: '$(SQL_FLUFF_REPORTS)'
+            searchFolder: '$(SQL_FLUFFS_REPORTS)'
             failTaskOnFailedTests: false
             testRunTitle: 'SQLFluff Lint - PR $(System.PullRequest.PullRequestId)'      
 ######################################################
@@ -304,7 +312,7 @@ stages:
                         $fullPath = Join-Path -Path "$(Build.SourcesDirectory)" -ChildPath $file
                         if (Test-Path $fullPath) {
                             Write-Host "Processing file: $fullPath"
-                            Add-Content -Path $logFile -Value "Processing migration script: $file"
+                            Add-Content -Path $logFile -Value "Processed migration script: $file"
                             $matches = Get-Content $fullPath |
                             Select-String -Pattern "(?i)(create\s+table|insert\s+into)\s+((\[[^\]]+\]|\w+)\.)*((\[[^\]]+\]|\w+))" -AllMatches
                             foreach ($matchInfo in $matches) {
