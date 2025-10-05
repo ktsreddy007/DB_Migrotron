@@ -1,4 +1,4 @@
-INSERT INTO Payroll.dbo.hclnb (Username, Email)
+INSERT INTO Payroll.dbo.tcs (Username, Email)
 VALUES 
 ('admin', 'admin@example.com'),
 ('user1', 'user1@example.com'),
