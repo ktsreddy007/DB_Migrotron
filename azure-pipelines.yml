@@ -91,7 +91,7 @@ stages:
                     exit 1
                 }      
             env:
-                dbUser: $(dbUser)
+                dbUser: $(dbUser_1)
                 dbPassword: $(dbPassword)
 ###################################################################################
   - stage: PrepareEnvironment
@@ -203,7 +203,7 @@ stages:
                     Write-Host "flyway_schema_history table NOT found. Skiping flyway validate for fresh DB."
                 } 
             env:
-              dbUser: $(dbUser)
+              dbUser: $(dbUser_1)
               dbPassword: $(dbPassword)     
           - task: PowerShell@2
             displayName: 'Flyway Info (Dry Run)'
@@ -325,7 +325,7 @@ stages:
                     }
                   Add-Content -Path $logFile -Value "======MIGRATION START ==============="
             env:
-              dbUser: $(dbUser)
+              dbUser: $(dbUser_1)
               dbPassword: $(dbPassword)       
 #######################################################
   - stage: Rollback_Finder
@@ -366,7 +366,7 @@ stages:
                          $connection.Close()
                     }
             env:
-              dbUser: $(dbUser)
+              dbUser: $(dbUser_1)
               dbPassword: $(dbPassword)
 ###############################################################             
   - stage: Flyway_Migration
@@ -422,7 +422,7 @@ stages:
                Write-Host "Flyway migrate completed successfully."
                $connection.Close()
             env:
-              dbUser: $(dbUser)
+              dbUser: $(dbUser_1)
               dbPassword: $(dbPassword)
 ###################################################################
   - stage: Postmigration_SQLLogger
@@ -470,7 +470,7 @@ stages:
                 Add-Content -Path $logFile -Value "=========MIGRATION COMPLETE =========`n"
                 Write-Host "Post-Migration Logging Completed."
            env:
-             dbUser: $(dbUser)
+             dbUser: $(dbUser_1)
              dbPassword: $(dbPassword)
 ###################################################################
   - stage: Mappertb_updater
@@ -542,7 +542,7 @@ stages:
                     exit 1 
                   }
           env:
-            dbUser: $(dbUser)
+            dbUser: $(dbUser_1)
             dbPassword: $(dbPassword)
 ###################################################################
   - stage: Postmigration_Flyway_Validator
@@ -564,6 +564,6 @@ stages:
                     exit 1
                 }
             env:
-              dbUser: $(dbUser)
+              dbUser: $(dbUser_1)
               dbPassword: $(dbPassword)
          
