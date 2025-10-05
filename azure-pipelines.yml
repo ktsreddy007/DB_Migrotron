@@ -182,6 +182,9 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
+                $env:FLYWAY_USER = $env:dbUser
+                $env:FLYWAY_PASSWORD = $env:dbPassword
+
                 $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
                 [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
                 $connection = New-Object System.Data.SqlClient.SqlConnection
@@ -211,12 +214,18 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
+                $env:FLYWAY_USER = $env:dbUser
+                $env:FLYWAY_PASSWORD = $env:dbPassword
+
                 Write-Host "Using Flyway config file at path: $(FLYWAY_CONFIG_PATH)"
                 & flyway info "-configFiles=$(FLYWAY_CONFIG_PATH)"
                 if ($LASTEXITCODE -ne 0) {
                       Write-Error "Flyway info command failed."
                       exit 1
-                }                 
+                }
+            env:
+              dbUser: $(dbUser_1)
+              dbPassword: $(dbPassword)                         
 ######################################################
   - stage: SQL_Linting
     displayName: "SQL_Syntax_Checker"
@@ -384,25 +393,30 @@ stages:
               script: |
                Write-Host "Connecting to DB server: $(DB_SERVER), Database: $(DB_NAME)"
                [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
+
                $dbUser = $env:dbUser
                $dbPassword = $env:dbPassword
+               
+               $env:FLYWAY_USER = $dbUser
+               $env:FLYWAY_PASSWORD = $dbPassword
+
                $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$dbUser;Password=$dbPassword;"
                $connection = New-Object System.Data.SqlClient.SqlConnection
                $connection.ConnectionString = $connectionString
                $connection.Open()
                Write-Host "DB connection opened."
+
                $tableName = "flyway_schema_history"
                $sqlQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '$tableName'"
                $command = $connection.CreateCommand()
                $command.CommandText = $sqlQuery
                $tableCount = $command.ExecuteScalar()
-               Write-Host "Table count result: $tableCount"
-               $flywayUser = $env:dbUser
-               $flywayPassword = $env:dbPassword
+               Write-Host "Table count result: $tableCount"    
+
                if ($tableCount -eq 0) {
                   Write-Host "Table '$tableName' does not exist."
                   Write-Host "Running flyway baseline before migrate with baselineVersion=0..."
-                  & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" baseline -baselineVersion=0 -user $flywayUser -password $flywayPassword
+                  & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" baseline -baselineVersion=0
                   if ($LASTEXITCODE -ne 0) {
                     Write-Error "Flyway baseline failed."
                     $connection.Close()
@@ -413,7 +427,7 @@ stages:
                   Write-Host "Table '$tableName' exists."
                 }
                Write-Host "Flyway migrate triggered on merge/push to main branch."
-               & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" migrate -user $flywayUser -password $flywayPassword
+               & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" migrate
                if ($LASTEXITCODE -ne 0) {
                   Write-Error "Flyway migrate failed."
                   $connection.Close()
@@ -557,6 +571,8 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
+                $env:FLYWAY_USER = $env:dbUser
+                $env:FLYWAY_PASSWORD = $env:dbPassword
                 Write-Host "Validating Flyway consistency after migration."
                 & flyway validate "-configFiles=$(FLYWAY_CONFIG_PATH)"
                 if ($LASTEXITCODE -ne 0) {
