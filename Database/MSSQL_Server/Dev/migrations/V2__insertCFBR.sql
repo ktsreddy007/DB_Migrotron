@@ -1,4 +1,4 @@
-INSERT INTO Payroll.dbo.Benetb (Username, Email)
+INSERT INTO Payroll.dbo.nations (Username, Email)
 VALUES 
 ('admin', 'admin@example.com'),
 ('user1', 'user1@example.com'),
