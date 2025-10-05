@@ -161,14 +161,12 @@ stages:
                       $version = sqlfluff --version
                       Write-Host "sqlfluff version: $version"
                     } catch {
-                      Write-Error "sqlfluff command failed even though it exists."
-                      exit 1
-                    } else {
-                      Write-Error "sqlfluff is not installed or not in PATH. Failing pipeline."
-                      exit 1
-                    }
-                }      
-
+                        Write-Error "sqlfluff command failed even though it exists."
+                        exit 1
+                } else {
+                         Write-Error "sqlfluff is not installed or not in PATH. Failing pipeline."
+                         exit 1
+                       } 
 ######################################################
   - stage: FlywayValidation
     dependsOn: PrepareEnvironment
@@ -382,13 +380,41 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
+               Write-Host "Connecting to DB server: $(DB_SERVER), Database: $(DB_NAME)"
+               [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
+               $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
+               $connection = New-Object System.Data.SqlClient.SqlConnection
+               $connection.ConnectionString = $connectionString
+               $connection.Open()
+               Write-Host "DB connection opened."
+               $tableName = "flyway_schema_history"
+               $sqlQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '$tableName'"
+               $command = $connection.CreateCommand()
+               $command.CommandText = $sqlQuery
+               $tableCount = $command.ExecuteScalar()
+               Write-Host "Table count result: $tableCount"
+               if ($tableCount -eq 0) {
+                  Write-Host "Table '$tableName' does not exist."
+                  Write-Host "Running flyway baseline before migrate with baselineVersion=0..."
+                  & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" baseline -baselineVersion=0 -user=$env:dbUser -password=$env:dbPassword
+                  if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Flyway baseline failed."
+                    $connection.Close()
+                    exit 1
+                  }
+                }
+                else {
+                  Write-Host "Table '$tableName' exists."
+                }
                Write-Host "Flyway migrate triggered on merge/push to main branch."
-               & flyway migrate "-configFiles=$(FLYWAY_CONFIG_PATH)"
+               & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" migrate -user=$env:dbUser -password=$env:dbPassword
                if ($LASTEXITCODE -ne 0) {
                   Write-Error "Flyway migrate failed."
+                  $connection.Close()
                   exit 1
                 }
-                Write-Host "Flyway migrate completed successfully."
+               Write-Host "Flyway migrate completed successfully."
+               $connection.Close()
             env:
               dbUser: $(dbUser)
               dbPassword: $(dbPassword)
