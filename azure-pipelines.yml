@@ -198,9 +198,10 @@ stages:
               Write-Host "The following SQL files will be linted:"
               $changedFiles | ForEach-Object { Write-Host " - $_" }
               $fileList = $changedFiles -join " "
+              $reportPath = "$(SQL_FLUFF_OUTPUT_FILE)"
               Write-Host "Running SQLFluff lint..."
-              sqlfluff lint $fileList --config "$(SQL_FLUFF_CONFIG)" --format junit --nocolor > "$(SQL_FLUFF_OUTPUT_FILE)"
-              Write-Host "📄 SQLFluff report generated at: $(SQL_FLUFF_OUTPUT_FILE)"
+              sqlfluff lint $fileList --config "$(SQL_FLUFF_CONFIG)" --format junit --nocolor > $reportPath
+              Write-Host "📄 SQLFluff report generated at: $reportPath"
         - task: PublishTestResults@2
           displayName: "Publish SQLFluff Test Results"
           inputs:
@@ -208,7 +209,7 @@ stages:
             testResultsFiles: '$(SQL_FLUFF_OUTPUT_FILE)'
             searchFolder: '$(SQL_FLUFF_REPORTS)'
             failTaskOnFailedTests: false
-            testRunTitle: 'SQLFluff Lint Report'      
+            testRunTitle: 'SQLFluff Lint - PR $(System.PullRequest.PullRequestId)'      
 ######################################################
   - stage: Pre_FlywayValidator
     dependsOn: SQL_Linting
