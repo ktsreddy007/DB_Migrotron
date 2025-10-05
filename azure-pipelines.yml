@@ -139,75 +139,74 @@ stages:
               script: |
                 $ErrorActionPreference = "Stop"
                 if (Get-Command python -ErrorAction SilentlyContinue) {
-                  Write-Host "Python is already installed."
-                  } else {
-                      Write-Host "Python not found. Installing via web installer (non-admin)..."
-                      $pythonInstaller = "$env:TEMP\python-installer.exe"
-                      Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe" -OutFile $pythonInstaller
-                      Start-Process -FilePath $pythonInstaller -ArgumentList '/quiet InstallAllUsers=0 PrependPath=1 Include_test=0' -Wait
-                      Remove-Item $pythonInstaller -Force
-                      $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "User") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "Machine")
-                    }
-                    if (Get-Command python -ErrorAction SilentlyContinue) {
-                        $pythonPath = Get-Command python | Select-Object -ExpandProperty Source
-                        $pythonDir = Split-Path $pythonPath
-                        $env:Path += ";$pythonDir"
-                        Write-Host "Python installed at: $pythonPath"
-                        python --version
-                    } else {
-                        Write-Error "Python installation failed or python not found in PATH."
-                        exit 1
-                      }
-          - task: PowerShell@2
-            displayName: 'Check and Install SQLFluff (tsql dialect)'
-            inputs:
-              targetType: 'inline'
-              script: |
-                $ErrorActionPreference = "Stop"
-                if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-                  Write-Error "❌ Python is not available in PATH. Install Python first."
-                  exit 1
+                  Write-Host "✅ Python already installed: $(Get-Command python)."
+                  python --version
+                  return
                 }
-                $scriptsPath = python -c "import site, os; print(os.path.join(site.USER_BASE, 'Scripts'))"
-                Write-Host "`n📂 Scripts Path: $scriptsPath"
-
-                $env:PATH = "$scriptsPath;$env:PATH"
-                Write-Host "🔧 Updated PATH: $env:PATH"
-
-                if (Test-Path $scriptsPath) {
-                    Write-Host "`n📁 Contents of Scripts directory:"
-                    Get-ChildItem $scriptsPath | ForEach-Object { Write-Host "  - $($_.Name)" }
+                Write-Host "⚙️ Python not found. Installing non-admin version..."
+                $url = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe"
+                $installer = "$env:TEMP\python-install.exe"
+                Invoke-WebRequest $url -OutFile $installer
+                Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_test=0" -Wait
+                Remove-Item $installer -Force
+                $userPythonPath = "$env:LocalAppData\Programs\Python\Python310"
+                $env:PATH = "$userPythonPath;$userPythonPath\Scripts;$env:PATH"
+                if (Get-Command python -ErrorAction SilentlyContinue) {
+                    Write-Host "✅ Python installed successfully: $(Get-Command python)."
+                    python --version
                 } else {
-                    Write-Warning "⚠️ Scripts path does not exist: $scriptsPath"
+                    Write-Error "❌ Python installation failed or not in PATH."
+                    exit 1
                   }
-
-                  $sqlfluffExe = Join-Path $scriptsPath 'sqlfluff.exe'
-                  if (Test-Path $sqlfluffExe) {
-                    Write-Host "`n✅ sqlfluff already installed at: $sqlfluffExe"
-                    try {
-                      $version = & $sqlfluffExe --version
-                      Write-Host "📦 sqlfluff version: $version"
-                    } catch {
-                        Write-Error "❌ sqlfluff exists but failed to run."
-                        exit 1
-                      }
-                  } else {
-                    Write-Host "`n📦 Installing sqlfluff with tsql dialect..."
-                    python -m pip install --user --upgrade "sqlfluff[tsql]"
-                    if (Test-Path $sqlfluffExe) {
-                        Write-Host "✅ sqlfluff successfully installed at: $sqlfluffExe"
-                        try {
-                          $version = & $sqlfluffExe --version
-                          Write-Host "📦 sqlfluff version: $version"
-                        } catch {
-                            Write-Error "❌ sqlfluff executable found but failed to run."
-                            exit 1
-                          }
-                    } else {
-                        Write-Error "❌ sqlfluff is not installed or not found in Scripts path. Failing pipeline."
-                        exit 1
-                      }
-                    }          
+#          - task: PowerShell@2
+#            displayName: 'Check and Install SQLFluff (tsql dialect)'
+#            inputs:
+#              targetType: 'inline'
+#              script: |
+#                $ErrorActionPreference = "Stop"
+#                if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+#                  Write-Error "❌ Python is not available in PATH. Install Python first."
+#                  exit 1
+#                }
+#                $scriptsPath = python -c "import site, os; print(os.path.join(site.USER_BASE, 'Scripts'))"
+#                Write-Host "`n📂 Scripts Path: $scriptsPath"
+#                 $env:PATH = "$scriptsPath;$env:PATH"
+#                Write-Host "🔧 Updated PATH: $env:PATH"
+#
+#                if (Test-Path $scriptsPath) {
+#                    Write-Host "`n📁 Contents of Scripts directory:"
+#                    Get-ChildItem $scriptsPath | ForEach-Object { Write-Host "  - $($_.Name)" }
+#                } else {
+#                    Write-Warning "⚠️ Scripts path does not exist: $scriptsPath"
+#                  }
+#
+#                  $sqlfluffExe = Join-Path $scriptsPath 'sqlfluff.exe'
+#                  if (Test-Path $sqlfluffExe) {
+#                    Write-Host "`n✅ sqlfluff already installed at: $sqlfluffExe"
+#                    try {
+#                      $version = & $sqlfluffExe --version
+#                      Write-Host "📦 sqlfluff version: $version"
+#                    } catch {
+#                        Write-Error "❌ sqlfluff exists but failed to run."
+#                        exit 1
+#                      }
+#                  } else {
+#                    Write-Host "`n📦 Installing sqlfluff with tsql dialect..."
+#                    python -m pip install --user --upgrade "sqlfluff[tsql]"
+#                    if (Test-Path $sqlfluffExe) {
+#                        Write-Host "✅ sqlfluff successfully installed at: $sqlfluffExe"
+#                        try {
+#                          $version = & $sqlfluffExe --version
+#                          Write-Host "📦 sqlfluff version: $version"
+#                        } catch {
+#                            Write-Error "❌ sqlfluff executable found but failed to run."
+#                            exit 1
+#                          }
+#                    } else {
+#                        Write-Error "❌ sqlfluff is not installed or not found in Scripts path. Failing pipeline."
+#                        exit 1
+#                      }
+#                    }          
 ######################################################
   - stage: SQL_Linting
     displayName: "SQL_Syntax_Checker"
