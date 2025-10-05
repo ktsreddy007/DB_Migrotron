@@ -401,7 +401,7 @@ stages:
                if ($tableCount -eq 0) {
                   Write-Host "Table '$tableName' does not exist."
                   Write-Host "Running flyway baseline before migrate with baselineVersion=0..."
-                  & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" baseline -baselineVersion=0 -user=$flywayUser -password=$flywayPassword
+                  & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" baseline -baselineVersion=0 -user $flywayUser -password $flywayPassword
                   if ($LASTEXITCODE -ne 0) {
                     Write-Error "Flyway baseline failed."
                     $connection.Close()
@@ -412,7 +412,7 @@ stages:
                   Write-Host "Table '$tableName' exists."
                 }
                Write-Host "Flyway migrate triggered on merge/push to main branch."
-               & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" migrate -user=$flywayUser -password=$flywayPassword
+               & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" migrate -user $flywayUser -password $flywayPassword
                if ($LASTEXITCODE -ne 0) {
                   Write-Error "Flyway migrate failed."
                   $connection.Close()
