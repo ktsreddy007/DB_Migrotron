@@ -216,6 +216,8 @@ stages:
               $changedFiles | ForEach-Object { Write-Host " - $_" }
               $fileList = $changedFiles -join " "
               $reportPath = "$(SQL_FLUFF_OUTPUT_FILE)"
+              $env:PATH = "$(SQLFLUFF_PATH);$env:PATH"
+              Write-Host "Updated PATH: $env:PATH"
               Write-Host "Running SQLFluff lint..."
               sqlfluff lint $fileList --config "$(SQL_FLUFF_CONFIG)" --format junit --nocolor > $reportPath
               Write-Host "📄 SQLFluff report generated at: $reportPath"
