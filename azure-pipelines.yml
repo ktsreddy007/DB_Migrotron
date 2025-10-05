@@ -91,7 +91,7 @@ stages:
                     exit 1
                 }      
             env:
-                dbUser: $(dbUser)
+                dbUser: $(dbUser_1)
                 dbPassword: $(dbPassword)
 ###################################################################################
   - stage: PrepareEnvironment
@@ -161,14 +161,13 @@ stages:
                       $version = sqlfluff --version
                       Write-Host "sqlfluff version: $version"
                     } catch {
-                      Write-Error "sqlfluff command failed even though it exists."
-                      exit 1
-                    } else {
-                      Write-Error "sqlfluff is not installed or not in PATH. Failing pipeline."
-                      exit 1
-                    }
-                }      
-
+                        Write-Error "sqlfluff command failed even though it exists."
+                        exit 1
+                  } else {
+                         Write-Error "sqlfluff is not installed or not in PATH. Failing pipeline."
+                         exit 1
+                       }
+                }          
 ######################################################
   - stage: FlywayValidation
     dependsOn: PrepareEnvironment
@@ -182,7 +181,7 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$(dbUser);Password=$(dbPassword);"
+                $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
                 [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
                 $connection = New-Object System.Data.SqlClient.SqlConnection
                 $connection.ConnectionString = $connectionString
@@ -204,7 +203,7 @@ stages:
                     Write-Host "flyway_schema_history table NOT found. Skiping flyway validate for fresh DB."
                 } 
             env:
-              dbUser: $(dbUser)
+              dbUser: $(dbUser_1)
               dbPassword: $(dbPassword)     
           - task: PowerShell@2
             displayName: 'Flyway Info (Dry Run)'
@@ -326,7 +325,7 @@ stages:
                     }
                   Add-Content -Path $logFile -Value "======MIGRATION START ==============="
             env:
-              dbUser: $(dbUser)
+              dbUser: $(dbUser_1)
               dbPassword: $(dbPassword)       
 #######################################################
   - stage: Rollback_Finder
@@ -367,7 +366,7 @@ stages:
                          $connection.Close()
                     }
             env:
-              dbUser: $(dbUser)
+              dbUser: $(dbUser_1)
               dbPassword: $(dbPassword)
 ###############################################################             
   - stage: Flyway_Migration
@@ -382,15 +381,47 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
+               Write-Host "Connecting to DB server: $(DB_SERVER), Database: $(DB_NAME)"
+               [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
+               $dbUser = $env:dbUser
+               $dbPassword = $env:dbPassword
+               $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$dbUser;Password=$dbPassword;"
+               $connection = New-Object System.Data.SqlClient.SqlConnection
+               $connection.ConnectionString = $connectionString
+               $connection.Open()
+               Write-Host "DB connection opened."
+               $tableName = "flyway_schema_history"
+               $sqlQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '$tableName'"
+               $command = $connection.CreateCommand()
+               $command.CommandText = $sqlQuery
+               $tableCount = $command.ExecuteScalar()
+               Write-Host "Table count result: $tableCount"
+               $flywayUser = $env:dbUser
+               $flywayPassword = $env:dbPassword
+               if ($tableCount -eq 0) {
+                  Write-Host "Table '$tableName' does not exist."
+                  Write-Host "Running flyway baseline before migrate with baselineVersion=0..."
+                  & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" baseline -baselineVersion=0 -user $flywayUser -password $flywayPassword
+                  if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Flyway baseline failed."
+                    $connection.Close()
+                    exit 1
+                  }
+                }
+                else {
+                  Write-Host "Table '$tableName' exists."
+                }
                Write-Host "Flyway migrate triggered on merge/push to main branch."
-               & flyway migrate "-configFiles=$(FLYWAY_CONFIG_PATH)"
+               & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" migrate -user $flywayUser -password $flywayPassword
                if ($LASTEXITCODE -ne 0) {
                   Write-Error "Flyway migrate failed."
+                  $connection.Close()
                   exit 1
                 }
-                Write-Host "Flyway migrate completed successfully."
+               Write-Host "Flyway migrate completed successfully."
+               $connection.Close()
             env:
-              dbUser: $(dbUser)
+              dbUser: $(dbUser_1)
               dbPassword: $(dbPassword)
 ###################################################################
   - stage: Postmigration_SQLLogger
@@ -438,7 +469,7 @@ stages:
                 Add-Content -Path $logFile -Value "=========MIGRATION COMPLETE =========`n"
                 Write-Host "Post-Migration Logging Completed."
            env:
-             dbUser: $(dbUser)
+             dbUser: $(dbUser_1)
              dbPassword: $(dbPassword)
 ###################################################################
   - stage: Mappertb_updater
@@ -454,7 +485,7 @@ stages:
               targetType: 'inline'
               script: |
                 try {
-                    $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$(dbUser);Password=$(dbPassword);"
+                    $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
                     [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
                     $connection = New-Object System.Data.SqlClient.SqlConnection
                     $connection.ConnectionString = $connectionString
@@ -510,7 +541,7 @@ stages:
                     exit 1 
                   }
           env:
-            dbUser: $(dbUser)
+            dbUser: $(dbUser_1)
             dbPassword: $(dbPassword)
 ###################################################################
   - stage: Postmigration_Flyway_Validator
@@ -532,6 +563,6 @@ stages:
                     exit 1
                 }
             env:
-              dbUser: $(dbUser)
+              dbUser: $(dbUser_1)
               dbPassword: $(dbPassword)
          
