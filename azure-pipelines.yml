@@ -137,14 +137,13 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "##[section]Using existing Python installation"
-                $pythonPath = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313"
-                $scriptsPath = "$pythonPath\Scripts"
-                $env:Path = "$scriptsPath;$pythonPath;$env:Path"
-                try {
-                  python --version
-                } catch {
-                  Write-Error "Python was not found even after setting PATH. Please verify PYTHON_HOME is correct."
+                Write-Host "##[section]Checking Python by full path"
+                $pythonExe = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313\python.exe"
+                if (Test-Path $pythonExe) {
+                  Write-Host "Python executable found at $pythonExe"
+                  & $pythonExe --version
+                } else {
+                  Write-Error "Python executable not found at $pythonExe"
                   exit 1
                 }
           - task: PowerShell@2
@@ -152,17 +151,17 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "##[section]Checking for existing sqlfluff installation"
-                $pythonPath = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313"
-                $scriptsPath = "$pythonPath\Scripts"
-                $env:Path = "$scriptsPath;$pythonPath;$env:Path"
-                if (Get-Command sqlfluff -ErrorAction SilentlyContinue) {
-                    Write-Host "sqlfluff is already installed."
+                $pythonExe = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313\python.exe"
+                $pipArgs = "-m pip install sqlfluff"
+                $scriptsPath = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313\Scripts"
+                $sqlfluffExe = Join-Path $scriptsPath "sqlfluff.exe"
+                if (Test-Path $sqlfluffExe) {
+                  Write-Host "sqlfluff found at $sqlfluffExe"
+                  & $sqlfluffExe --version
                 } else {
-                    Write-Host "sqlfluff not found. Installing..."
-                    & "$pythonPath\python.exe" -m pip install sqlfluff
-                  }
-                sqlfluff --version        
+                  Write-Host "sqlfluff not found. Installing..."
+                  & $pythonExe $pipArgs
+                }       
 ######################################################
 #  - stage: SQL_Linting
 #    displayName: "SQL_Syntax_Checker"
