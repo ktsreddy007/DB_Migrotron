@@ -3,10 +3,10 @@ trigger: none
 #    include:
 #      - main
 
-#pr:
-#  branches:
-#    include:
-#     - main
+pr:
+  branches:
+    include:
+     - main
       
 pool:
   name: Self-Hosted   
@@ -137,155 +137,55 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                $ErrorActionPreference = "Stop"
-                if (Get-Command python -ErrorAction SilentlyContinue) {
-                  Write-Host "✅ Python already installed: $(Get-Command python)."
-                  python --version
-                  return
-                }
-                Write-Host "⚙️ Python not found. Installing non-admin version..."
-                $url = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe"
-                $installer = "$env:TEMP\python-install.exe"
-                Invoke-WebRequest $url -OutFile $installer
-                Start-Process -FilePath $installer -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1 Include_test=0" -Wait
-                Remove-Item $installer -Force
-                $userPythonPath = "$env:LocalAppData\Programs\Python\Python310"
-                $env:PATH = "$userPythonPath;$userPythonPath\Scripts;$env:PATH"
-                if (Get-Command python -ErrorAction SilentlyContinue) {
-                    Write-Host "✅ Python installed successfully: $(Get-Command python)."
-                    python --version
+                Write-Host "##[section]Checking Python by full path"
+                $pythonExe = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313\python.exe"
+                if (Test-Path $pythonExe) {
+                  Write-Host "Python executable found at $pythonExe"
+                  & $pythonExe --version
                 } else {
-                    Write-Error "❌ Python installation failed or not in PATH."
-                    exit 1
-                  }
-#          - task: PowerShell@2
-#            displayName: 'Check and Install SQLFluff (tsql dialect)'
-#            inputs:
-#              targetType: 'inline'
-#              script: |
-#                $ErrorActionPreference = "Stop"
-#                if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-#                  Write-Error "❌ Python is not available in PATH. Install Python first."
-#                  exit 1
-#                }
-#                $scriptsPath = python -c "import site, os; print(os.path.join(site.USER_BASE, 'Scripts'))"
-#                Write-Host "`n📂 Scripts Path: $scriptsPath"
-#                 $env:PATH = "$scriptsPath;$env:PATH"
-#                Write-Host "🔧 Updated PATH: $env:PATH"
-#
-#                if (Test-Path $scriptsPath) {
-#                    Write-Host "`n📁 Contents of Scripts directory:"
-#                    Get-ChildItem $scriptsPath | ForEach-Object { Write-Host "  - $($_.Name)" }
-#                } else {
-#                    Write-Warning "⚠️ Scripts path does not exist: $scriptsPath"
-#                  }
-#
-#                  $sqlfluffExe = Join-Path $scriptsPath 'sqlfluff.exe'
-#                  if (Test-Path $sqlfluffExe) {
-#                    Write-Host "`n✅ sqlfluff already installed at: $sqlfluffExe"
-#                    try {
-#                      $version = & $sqlfluffExe --version
-#                      Write-Host "📦 sqlfluff version: $version"
-#                    } catch {
-#                        Write-Error "❌ sqlfluff exists but failed to run."
-#                        exit 1
-#                      }
-#                  } else {
-#                    Write-Host "`n📦 Installing sqlfluff with tsql dialect..."
-#                    python -m pip install --user --upgrade "sqlfluff[tsql]"
-#                    if (Test-Path $sqlfluffExe) {
-#                        Write-Host "✅ sqlfluff successfully installed at: $sqlfluffExe"
-#                        try {
-#                          $version = & $sqlfluffExe --version
-#                          Write-Host "📦 sqlfluff version: $version"
-#                        } catch {
-#                            Write-Error "❌ sqlfluff executable found but failed to run."
-#                            exit 1
-#                          }
-#                    } else {
-#                        Write-Error "❌ sqlfluff is not installed or not found in Scripts path. Failing pipeline."
-#                        exit 1
-#                      }
-#                    }          
+                  Write-Error "Python executable not found at $pythonExe"
+                  exit 1
+                }
+          - task: PowerShell@2
+            displayName: 'Check and Install SQLFluff'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $pythonExe = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313\python.exe"
+                $pipArgs = "-m pip install sqlfluff"
+                $scriptsPath = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313\Scripts"
+                $sqlfluffExe = Join-Path $scriptsPath "sqlfluff.exe"
+                if (Test-Path $sqlfluffExe) {
+                  Write-Host "sqlfluff found at $sqlfluffExe"
+                  & $sqlfluffExe --version
+                } else {
+                  Write-Host "sqlfluff not found. Installing..."
+                  & $pythonExe $pipArgs
+                }       
 ######################################################
-  - stage: SQL_Linting
-    displayName: "SQL_Syntax_Checker"
-    dependsOn: PrepareEnvironment
-    condition: succeeded()
-    jobs:
-     - job: Run_SQLFluff_Lint
-       steps:
-        - task: PowerShell@2
-          displayName: "Run SQLFluff Lint"
-          inputs:
-            targetType: 'inline'
-            script: |
-              $ErrorActionPreference = "Stop"
-
-              # ✅ Check Python availability
-              if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-                Write-Error "❌ Python is not installed or not found in PATH."
-                exit 1
-              }
-
-              # ✅ Get the user scripts path
-              $scriptsPath = python -c "import site, os; print(os.path.join(site.USER_BASE, 'Scripts'))"
-              Write-Host "📂 Using Scripts Path: $scriptsPath"
-
-              # ✅ Add Scripts path to PATH temporarily for this session
-              $env:PATH = "$scriptsPath;$env:PATH"
-
-              # ✅ Define sqlfluff executable path manually (NEW)
-              $sqlfluffExe = Join-Path $scriptsPath 'sqlfluff.exe'
-
-              # ✅ Check if sqlfluff exists at expected path
-              if (-not (Test-Path $sqlfluffExe)) {
-                Write-Error "❌ sqlfluff is not installed or not found in expected user scripts path."
-                exit 1
-              }
-
-              # ✅ Create output directory if not exists
-              if (-Not (Test-Path -Path "$(SQL_FLUFFS_REPORTS)")) {
-                New-Item -ItemType Directory -Path "$(SQL_FLUFFS_REPORTS)" | Out-Null
-                Write-Host "📁 Created folder: $(SQL_FLUFFS_REPORTS)"
-              } else {
-                Write-Host "📁 Folder exists: $(SQL_FLUFFS_REPORTS)"
-              }
-
-              Write-Host "🔄 Fetching target branch: $(System.PullRequest.TargetBranch)"
-              git fetch origin $(System.PullRequest.TargetBranch)
-
-              Write-Host "🔍 Getting changed SQL files..."
-              $changedFiles = git diff --diff-filter=AMR --name-only origin/$(System.PullRequest.TargetBranch) HEAD |
-                Where-Object { ($_ -like "*migrations/*.sql" -or $_ -like "*rollback_sql/*.sql") }
-
-              if (-Not $changedFiles) {
-                Write-Host "✅ No relevant .sql files to lint in this PR."
-                exit 0
-              }
-
-              Write-Host "📝 The following SQL files will be linted:"
-              $changedFiles | ForEach-Object { Write-Host " - $_" }
-
-              $fileList = $changedFiles -join " "
-              $reportPath = "$(SQL_FLUFF_OUTPUT_FILE)"
-
-              Write-Host "🧪 Running sqlfluff lint..."
-              # ✅ Use full path to sqlfluff to ensure it runs properly (NEW)
-              & $sqlfluffExe lint $fileList --config "$(SQL_FLUFF_CONFIG)" --format junit --nocolor > $reportPath
-
-              Write-Host "✅ SQLFluff report generated at: $reportPath"
-        - task: PublishTestResults@2
-          displayName: "Publish SQLFluff Test Results"
-          inputs:
-            testResultsFormat: 'JUnit'
-            testResultsFiles: '$(SQL_FLUFF_OUTPUT_FILE)'
-            searchFolder: '$(SQL_FLUFFS_REPORTS)'
-            failTaskOnFailedTests: false
-            testRunTitle: 'SQLFluff Lint - PR $(System.PullRequest.PullRequestId)'      
+#  - stage: SQL_Linting
+#    displayName: "SQL_Syntax_Checker"
+#    dependsOn: PrepareEnvironment
+#    condition: succeeded()
+#    jobs:
+#     - job: Run_SQLFluff_Lint
+#       steps:
+#        - task: PowerShell@2
+#          displayName: "Run SQLFluff Lint"
+#          inputs:
+#            targetType: 'inline'
+#            script: |
+#        - task: PublishTestResults@2
+#          displayName: "Publish SQLFluff Test Results"
+#          inputs:
+#            testResultsFormat: 'JUnit'
+#            testResultsFiles: '$(SQL_FLUFF_OUTPUT_FILE)'
+#            searchFolder: '$(SQL_FLUFFS_REPORTS)'
+#            failTaskOnFailedTests: false
+#            testRunTitle: 'SQLFluff Lint - PR $(System.PullRequest.PullRequestId)'      
 ######################################################
   - stage: Pre_FlywayValidator
-    dependsOn: SQL_Linting
+    dependsOn: PrepareEnvironment
     condition: succeeded()
     displayName: 'Flyway Validate and Info'
     jobs:
@@ -546,6 +446,8 @@ stages:
 ###################################################################
   - stage: Postmigration_SQLLogger
     displayName: "Post_SQL_Logger"
+    dependsOn: Flyway_Migration
+    condition: succeeded()
     jobs:
      - job: PostSQL_Logger
        steps:
@@ -686,5 +588,4 @@ stages:
                 }
             env:
               dbUser: $(dbUser_1)
-
               dbPassword: $(dbPassword)
