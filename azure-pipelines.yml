@@ -137,31 +137,28 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "##[section]Checking Python by full path"
-                $pythonExe = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313\python.exe"
-                if (Test-Path $pythonExe) {
-                  Write-Host "Python executable found at $pythonExe"
-                  & $pythonExe --version
-                } else {
-                  Write-Error "Python executable not found at $pythonExe"
+                $pythonPath = "C:\Program Files\Python313\python.exe"
+                if (-Not (Test-Path $pythonPath)) {
+                  Write-Error "Python not found at $pythonPath. Please install Python system-wide."
                   exit 1
                 }
+                Write-Host "Python found at $pythonPath"
+                & "$pythonPath" --version
           - task: PowerShell@2
             displayName: 'Check and Install SQLFluff'
             inputs:
               targetType: 'inline'
               script: |
-                $pythonExe = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313\python.exe"
-                $pipArgs = "-m pip install sqlfluff"
-                $scriptsPath = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313\Scripts"
-                $sqlfluffExe = Join-Path $scriptsPath "sqlfluff.exe"
-                if (Test-Path $sqlfluffExe) {
-                  Write-Host "sqlfluff found at $sqlfluffExe"
-                  & $sqlfluffExe --version
+                $pythonPath = "C:\Program Files\Python313\python.exe"
+                $sqlfluffPath = "C:\Program Files\Python313\Scripts\sqlfluff.exe"
+                if (-Not (Test-Path $sqlfluffPath)) {
+                  Write-Host "sqlfluff not found. Installing via pip..."
+                  & "$pythonPath" -m pip install sqlfluff
                 } else {
-                  Write-Host "sqlfluff not found. Installing..."
-                  & $pythonExe $pipArgs
-                }       
+                    Write-Host "sqlfluff is already installed at $sqlfluffPath"
+                  }
+                Write-Host "sqlfluff version:"
+                & "$sqlfluffPath" --version      
 ######################################################
 #  - stage: SQL_Linting
 #    displayName: "SQL_Syntax_Checker"
