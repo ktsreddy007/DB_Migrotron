@@ -172,11 +172,14 @@ stages:
           inputs:
             targetType: 'inline'
             script: |
+              $sqlfluffPath = "C:\Program Files\Python313\Scripts\sqlfluff.exe"
+
               New-Item -ItemType Directory -Force -Path "$(SQL_FLUFFS_REPORTS)"
               git fetch origin $(System.PullRequest.TargetBranch)
 
-              $changedFiles = git diff --name-only origin/$(System.PullRequest.TargetBranch) HEAD `| Where-Object { $_.ToLower().EndsWith(".sql") }
-              if (-not $changedFiles) {
+              $diffFiles = git diff --name-only origin/$(System.PullRequest.TargetBranch) HEAD
+              $changedFiles = $diffFiles | Where-Object { $_.ToLower().EndsWith(".sql") }
+              if (-not $changedFiles -or $changedFiles.Count -eq 0) {
                 Write-Host "##[section]No SQL files changed in this PR. Skipping linting."
                 Exit 0
               }
@@ -188,11 +191,11 @@ stages:
               $lintErrors = 0
               foreach ($file in $changedFiles) {
                   Write-Host "Linting file: $file"
-                  sqlfluff lint $file `
+                  & "$sqlfluffPath" lint $file `
                     --config "$(SQL_FLUFF_CONFIG)" `
                     --format json `
                     | Out-File -Append -Encoding utf8 $jsonOutputFile
-                  sqlfluff lint $file `
+                  & "$sqlfluffPath" lint $file `
                     --config "$(SQL_FLUFF_CONFIG)" `
                     --format junit `
                     | Out-File -Append -Encoding utf8 $outputFile
