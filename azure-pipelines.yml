@@ -22,7 +22,7 @@ variables:
   TABLES_FILE: '$(LOG_FOLDER)/Tables_list.txt'
   SQL_FLUFF_CONFIG: '$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/.sqlfluff'
   SQL_FLUFFS_REPORTS: '$(Build.ArtifactStagingDirectory)/SQLFluff_Reports'
-  SQL_FLUFF_OUTPUT_FILE: '$(SQL_FLUFFS_REPORTS)/sqlfluff_pr_$(System.PullRequest.PullRequestId).xml'
+  SQL_FLUFF_OUTPUT_FILE: '$(SQL_FLUFFS_REPORTS)/sqlfluff_pr_$(System.PullRequest.PullRequestId).json'
 
 stages:
   - stage: CaptureRollbackScripts
@@ -187,7 +187,7 @@ stages:
               $changedFiles | ForEach-Object { Write-Host $_ }
 
               $outputFile = "$(SQL_FLUFF_OUTPUT_FILE)"
-              $jsonOutputFile = "$(SQL_FLUFFS_REPORTS)/sqlfluff_pr_$(System.PullRequest.PullRequestId).json"
+              $jsonOutputFile = "$(SQL_FLUFFS_REPORTS)"
               $lintErrors = 0
               foreach ($file in $changedFiles) {
                   Write-Host "Linting file: $file"
@@ -207,12 +207,7 @@ stages:
                   Write-Host "##vso[task.complete result=SucceededWithIssues;]SQLFluff found linting issues."
               } else {
                   Write-Host "##[section]SQLFluff: No linting issues found."
-                }
-        - task: PublishBuildArtifacts@1
-          displayName: "Publish SQLFluff JSON Report"
-          inputs:
-            PathtoPublish: '$(SQL_FLUFFS_REPORTS)'
-            ArtifactName: 'SQLFluffReports'                          
+                }                          
 ######################################################
   - stage: Pre_FlywayValidator
     dependsOn: SQL_Linting
