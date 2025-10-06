@@ -175,8 +175,10 @@ stages:
               New-Item -ItemType Directory -Force -Path "$(SQL_FLUFFS_REPORTS)"
               git fetch origin $(System.PullRequest.TargetBranch)
 
-              $changedFiles = git diff --name-only origin/$(System.PullRequest.TargetBranch) HEAD `| Where-Object { $_.ToLower().EndsWith(".sql") }
-              if (-not $changedFiles) {
+              $diffFiles = git diff --name-only origin/$(System.PullRequest.TargetBranch) HEAD
+              $changedFiles = $diffFiles | Where-Object { $_.ToLower().EndsWith(".sql") }
+              
+              if (-not $changedFiles -or $changedFiles.Count -eq 0) {
                 Write-Host "##[section]No SQL files changed in this PR. Skipping linting."
                 Exit 0
               }
