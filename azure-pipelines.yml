@@ -137,31 +137,30 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "##[section]Checking Python by full path"
-                $pythonExe = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313\python.exe"
-                if (Test-Path $pythonExe) {
-                  Write-Host "Python executable found at $pythonExe"
-                  & $pythonExe --version
+                if (Get-Command python -ErrorAction SilentlyContinue) {
+                  Write-Host "Python is already installed."
                 } else {
-                  Write-Error "Python executable not found at $pythonExe"
-                  exit 1
-                }
+                    Write-Host "Installing Python 3 via Chocolatey..."
+                    choco install -y python
+                    $env:Path += ";$env:ProgramFiles\Python310\Scripts;$env:ProgramFiles\Python310\"
+                  }
+                python --version
           - task: PowerShell@2
             displayName: 'Check and Install SQLFluff'
             inputs:
               targetType: 'inline'
               script: |
-                $pythonExe = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313\python.exe"
-                $pipArgs = "-m pip install sqlfluff"
-                $scriptsPath = "C:\Users\ktsreddy\AppData\Local\Programs\Python\Python313\Scripts"
-                $sqlfluffExe = Join-Path $scriptsPath "sqlfluff.exe"
-                if (Test-Path $sqlfluffExe) {
-                  Write-Host "sqlfluff found at $sqlfluffExe"
-                  & $sqlfluffExe --version
-                } else {
-                  Write-Host "sqlfluff not found. Installing..."
-                  & $pythonExe $pipArgs
-                }       
+                script: |
+                  if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+                      Write-Error "Python is not available. Please ensure it's installed before running this step."
+                      exit 1
+                  }
+                  if (Get-Command sqlfluff -ErrorAction SilentlyContinue) {
+                      Write-Host "sqlfluff is already installed."
+                  } else {
+                  Write-Host "sqlfluff not found. Installing using pip..."
+                  python -m pip install sqlfluff
+                }      
 ######################################################
 #  - stage: SQL_Linting
 #    displayName: "SQL_Syntax_Checker"
