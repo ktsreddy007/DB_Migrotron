@@ -17,11 +17,11 @@ variables:
   FLYWAY_CONFIG_PATH: '$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/conf/flyway-dev.conf' 
   REPO_URL: 'https://github.com/ktsreddy007/DB_Migrotron' 
   REPO_FOLDER: 'Database/MSSQL_Server/Dev/rollback_sql'
-  LOG_FOLDER: '$(Build.SourcesDirectory)/Pre_Post_SQL_Logs'
+  LOG_FOLDER: '$(Agent.TempDirectory)/Pre_Post_SQL_Logs'
   LOG_FILE: '$(LOG_FOLDER)/Migration_Logs.txt'
   TABLES_FILE: '$(LOG_FOLDER)/Tables_list.txt'
   SQL_FLUFF_CONFIG: '$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/.sqlfluff'
-  SQL_FLUFFS_REPORTS: '$(Build.SourcesDirectory)/SQLFluff_Reports'
+  SQL_FLUFFS_REPORTS: '$(Agent.TempDirectory)/SQLFluff_Reports'
   SQL_FLUFF_OUTPUT_FILE: '$(SQL_FLUFFS_REPORTS)/sqlfluff_pr_$(System.PullRequest.PullRequestId).json'
 
 stages:
