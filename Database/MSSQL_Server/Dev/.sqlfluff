@@ -3,14 +3,22 @@ dialect = tsql
 exclude_rules = CP01, CP02, LT04  # Replacing L009, L029, L034 equivalents
 max_line_length = 120
 
-[sqlfluff:indentation]
+[sqlfluff:rules]
+max_line_length = 80
 tab_space_size = 4
+indent_unit = space
 
-[sqlfluff:rules:capitalisation.keywords]
-capitalisation_policy = consistent
+[sqlfluff:rules:L010]  # Inconsistent capitalisation of keywords
+capitalisation_policy = upper
 
-[sqlfluff:rules:capitalisation.identifiers]
-extended_capitalisation_policy = consistent
+[sqlfluff:rules:L014]  # Unquoted identifiers
+extended_capitalisation_policy = upper
 
-[sqlfluff:rules:layout.commas]
-comma_style = trailing
+[sqlfluff:rules:L016]  # Line too long
+max_line_length = 80
+
+[sqlfluff:rules:L029]  # Keyword immediately after bracket
+require_spacing = true
+
+[sqlfluff:rules:L006]  # Operators should be surrounded by space
+allow_newlines = false

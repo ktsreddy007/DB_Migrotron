@@ -160,29 +160,62 @@ stages:
                 Write-Host "sqlfluff version:"
                 & "$sqlfluffPath" --version      
 ######################################################
-#  - stage: SQL_Linting
-#    displayName: "SQL_Syntax_Checker"
-#    dependsOn: PrepareEnvironment
-#    condition: succeeded()
-#    jobs:
-#     - job: Run_SQLFluff_Lint
-#       steps:
-#        - task: PowerShell@2
-#          displayName: "Run SQLFluff Lint"
-#          inputs:
-#            targetType: 'inline'
-#            script: |
-#        - task: PublishTestResults@2
-#          displayName: "Publish SQLFluff Test Results"
-#          inputs:
-#            testResultsFormat: 'JUnit'
-#            testResultsFiles: '$(SQL_FLUFF_OUTPUT_FILE)'
-#            searchFolder: '$(SQL_FLUFFS_REPORTS)'
-#            failTaskOnFailedTests: false
-#            testRunTitle: 'SQLFluff Lint - PR $(System.PullRequest.PullRequestId)'      
+  - stage: SQL_Linting
+    displayName: "SQL_Syntax_Checker"
+    dependsOn: PrepareEnvironment
+    condition: succeeded()
+    jobs:
+     - job: Run_SQLFluff_Lint
+       steps:
+        - task: PowerShell@2
+          displayName: "Run SQLFluff Lint"
+          inputs:
+            targetType: 'inline'
+            script: |
+              New-Item -ItemType Directory -Force -Path "$(SQL_FLUFFS_REPORTS)"
+              git fetch origin $(System.PullRequest.TargetBranch)
+
+              $changedFiles = git diff --name-only origin/$(System.PullRequest.TargetBranch) HEAD `| Where-Object { $_.ToLower().EndsWith(".sql") }
+              if (-not $changedFiles) {
+                Write-Host "##[section]No SQL files changed in this PR. Skipping linting."
+                Exit 0
+              }
+              Write-Host "##[section]Changed SQL Files:"
+              $changedFiles | ForEach-Object { Write-Host $_ }
+
+              $outputFile = "$(SQL_FLUFF_OUTPUT_FILE)"
+              $jsonOutputFile = "$(SQL_FLUFFS_REPORTS)/sqlfluff_pr_$(System.PullRequest.PullRequestId).json"
+              $lintErrors = 0
+              foreach ($file in $changedFiles) {
+                  Write-Host "Linting file: $file"
+                  sqlfluff lint $file `
+                    --config "$(SQL_FLUFF_CONFIG)" `
+                    --format json `
+                    | Out-File -Append -Encoding utf8 $jsonOutputFile
+                  sqlfluff lint $file `
+                    --config "$(SQL_FLUFF_CONFIG)" `
+                    --format junit `
+                    | Out-File -Append -Encoding utf8 $outputFile
+                  if ($LASTEXITCODE -ne 0) {
+                    $lintErrors++
+                  }
+              }
+              if ($lintErrors -gt 0) {
+                  Write-Host "##vso[task.complete result=SucceededWithIssues;]SQLFluff found linting issues."
+              } else {
+                  Write-Host "##[section]SQLFluff: No linting issues found."
+                }          
+        - task: PublishTestResults@2
+          displayName: "Publish SQLFluff Test Results"
+          inputs:
+            testResultsFormat: 'JUnit'
+            testResultsFiles: '$(SQL_FLUFF_OUTPUT_FILE)'
+            searchFolder: '$(SQL_FLUFFS_REPORTS)'
+            failTaskOnFailedTests: false
+            testRunTitle: 'SQLFluff Lint - PR $(System.PullRequest.PullRequestId)'      
 ######################################################
   - stage: Pre_FlywayValidator
-    dependsOn: PrepareEnvironment
+    dependsOn: SQL_Linting
     condition: succeeded()
     displayName: 'Flyway Validate and Info'
     jobs:
