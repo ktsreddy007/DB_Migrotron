@@ -137,15 +137,16 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                Write-Host "##[section]Checking for existing Python installation"
-                if (Get-Command python -ErrorAction SilentlyContinue) {
-                    Write-Host "Python is already installed."
-                } else {
-                    Write-Host "Installing Python 3 via Chocolatey..."
-                    choco install -y python
-                    $env:Path += ";$env:ProgramFiles\Python310\Scripts;$env:ProgramFiles\Python310\"
-                  }
-                python --version
+                Write-Host "##[section]Using existing Python installation"
+                $pythonPath = "$(PYTHON_HOME)"
+                $scriptsPath = "$pythonPath\Scripts"
+                $env:Path = "$scriptsPath;$pythonPath;$env:Path"
+                try {
+                  python --version
+                } catch {
+                  Write-Error "Python was not found even after setting PATH. Please verify PYTHON_HOME is correct."
+                  exit 1
+                }
           - task: PowerShell@2
             displayName: 'Check and Install SQLFluff'
             inputs:
