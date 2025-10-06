@@ -3,10 +3,10 @@ trigger: none
 #    include:
 #      - main
 
-pr:
-  branches:
-    include:
-      - main
+#pr:
+#  branches:
+#    include:
+#     - main
       
 pool:
   name: Self-Hosted   
@@ -686,4 +686,5 @@ stages:
                 }
             env:
               dbUser: $(dbUser_1)
+
               dbPassword: $(dbPassword)
