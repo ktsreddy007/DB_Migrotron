@@ -147,7 +147,7 @@ stages:
                   }
                 python --version
           - task: PowerShell@2
-            displayName: 'Check and Install SQLFluff (tsql dialect)'
+            displayName: 'Check and Install SQLFluff'
             inputs:
               targetType: 'inline'
               script: |
@@ -185,7 +185,7 @@ stages:
 #            testRunTitle: 'SQLFluff Lint - PR $(System.PullRequest.PullRequestId)'      
 ######################################################
   - stage: Pre_FlywayValidator
-    dependsOn: SQL_Linting
+    dependsOn: PrepareEnvironment
     condition: succeeded()
     displayName: 'Flyway Validate and Info'
     jobs:
@@ -446,6 +446,8 @@ stages:
 ###################################################################
   - stage: Postmigration_SQLLogger
     displayName: "Post_SQL_Logger"
+    dependsOn: Flyway_Migration
+    condition: succeeded()
     jobs:
      - job: PostSQL_Logger
        steps:
@@ -586,5 +588,4 @@ stages:
                 }
             env:
               dbUser: $(dbUser_1)
-
               dbPassword: $(dbPassword)
