@@ -1,6 +1,0 @@
-defkmgk
-
-dgd
-
-
-46
