@@ -137,30 +137,28 @@ stages:
             inputs:
               targetType: 'inline'
               script: |
-                if (Get-Command python -ErrorAction SilentlyContinue) {
-                  Write-Host "Python is already installed."
-                } else {
-                    Write-Host "Installing Python 3 via Chocolatey..."
-                    choco install -y python
-                    $env:Path += ";$env:ProgramFiles\Python310\Scripts;$env:ProgramFiles\Python310\"
-                  }
-                python --version
+                $pythonPath = "C:\Program Files\Python313\python.exe"
+                if (-Not (Test-Path $pythonPath)) {
+                  Write-Error "Python not found at $pythonPath. Please install Python system-wide."
+                  exit 1
+                }
+                Write-Host "Python found at $pythonPath"
+                & "$pythonPath" --version
           - task: PowerShell@2
             displayName: 'Check and Install SQLFluff'
             inputs:
               targetType: 'inline'
               script: |
-                script: |
-                  if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-                      Write-Error "Python is not available. Please ensure it's installed before running this step."
-                      exit 1
+                $pythonPath = "C:\Program Files\Python313\python.exe"
+                $sqlfluffPath = "C:\Program Files\Python313\Scripts\sqlfluff.exe"
+                if (-Not (Test-Path $sqlfluffPath)) {
+                  Write-Host "sqlfluff not found. Installing via pip..."
+                  & "$pythonPath" -m pip install sqlfluff
+                } else {
+                    Write-Host "sqlfluff is already installed at $sqlfluffPath"
                   }
-                  if (Get-Command sqlfluff -ErrorAction SilentlyContinue) {
-                      Write-Host "sqlfluff is already installed."
-                  } else {
-                  Write-Host "sqlfluff not found. Installing using pip..."
-                  python -m pip install sqlfluff
-                }      
+                Write-Host "sqlfluff version:"
+                & "$sqlfluffPath" --version      
 ######################################################
 #  - stage: SQL_Linting
 #    displayName: "SQL_Syntax_Checker"
