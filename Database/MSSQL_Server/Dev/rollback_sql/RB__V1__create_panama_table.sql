@@ -1,6 +1,6 @@
 -- Create Employees table in dbo schema
 
-CREATE TABLE Payroll.dbo.Employeesssss (
+CREATE TABLE Payroll.dbo.jaci (
     EmployeeID INT IDENTITY(1,1) PRIMARY KEY,
     FirstName NVARCHAR(50) NOT NULL,
     LastName NVARCHAR(50) NOT NULL,
