@@ -3,10 +3,10 @@ trigger: none
 #    include:
 #      - main
 
-#pr:
-#  branches:
-#    include:
-#     - main
+pr:
+  branches:
+    include:
+     - main
       
 pool:
   name: Self-Hosted   
@@ -175,7 +175,6 @@ stages:
 #              $sqlfluffPath = "C:\Program Files\Python313\Scripts\sqlfluff.exe"
 #              New-Item -ItemType Directory -Force -Path "$(SQL_FLUFFS_REPORTS)"
 #              git fetch origin $(System.PullRequest.TargetBranch)
-
 #              $diffFiles = git diff --name-only origin/$(System.PullRequest.TargetBranch) HEAD
 #              $changedFiles = $diffFiles | Where-Object { $_.ToLower().EndsWith(".sql") }
 #              if (-not $changedFiles -or $changedFiles.Count -eq 0) {
@@ -184,7 +183,6 @@ stages:
 #              }
 #              Write-Host "##[section]Changed SQL Files:"
 #              $changedFiles | ForEach-Object { Write-Host $_ }
-
 #              $outputFile = "$(SQL_FLUFF_OUTPUT_FILE)"
 #              $jsonOutputFile = "$(SQL_FLUFFS_REPORTS)"
 #              $lintErrors = 0
