@@ -4,7 +4,7 @@ IF NOT EXISTS (
     WHERE TABLE_NAME = 'Payroll.dbo.tejusers' AND TABLE_SCHEMA = 'dbo'
 )
 BEGIN
-CREATE TABLE Payroll.dbo.users (
+CREATE TABLE Payroll.dbo.tejusers (
     Id INT IDENTITY(1,1) PRIMARY KEY,
     Username NVARCHAR(100) NOT NULL,
     Email NVARCHAR(255) NOT NULL,
