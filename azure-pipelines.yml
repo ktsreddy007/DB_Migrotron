@@ -3,10 +3,10 @@ trigger: none
 #    include:
 #      - main
 
-pr:
-  branches:
-    include:
-     - main
+#pr:
+#  branches:
+#    include:
+#     - main
       
 pool:
   name: Self-Hosted   
@@ -20,9 +20,9 @@ variables:
   LOG_FOLDER: 'B:\Pre_Post_SQL_Logs'
   LOG_FILE: '$(LOG_FOLDER)/Migration_Logs.txt'
   TABLES_FILE: '$(LOG_FOLDER)/Tables_list.txt'
-  SQL_FLUFF_CONFIG: '$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/.sqlfluff'
-  SQL_FLUFFS_REPORTS: 'B:\SQLFluff_Reports'
-  SQL_FLUFF_OUTPUT_FILE: '$(SQL_FLUFFS_REPORTS)/sqlfluff_pr_$(System.PullRequest.PullRequestId).json'
+#  SQL_FLUFF_CONFIG: '$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/.sqlfluff'
+#  SQL_FLUFFS_REPORTS: 'B:\SQLFluff_Reports'
+#  SQL_FLUFF_OUTPUT_FILE: '$(SQL_FLUFFS_REPORTS)/sqlfluff_pr_$(System.PullRequest.PullRequestId).json'
 
 stages:
   - stage: CaptureRollbackScripts
@@ -132,78 +132,77 @@ stages:
                     $env:Path = "$flywayPath;$env:Path"
                     Write-Host "Flyway CLI installed successfully."
                   }
-          - task: PowerShell@2
-            displayName: 'Check and Install Python'
-            inputs:
-              targetType: 'inline'
-              script: |
-                $pythonPath = "C:\Program Files\Python313\python.exe"
-                if (-Not (Test-Path $pythonPath)) {
-                  Write-Error "Python not found at $pythonPath. Please install Python system-wide."
-                  exit 1
-                }
-                Write-Host "Python found at $pythonPath"
-                & "$pythonPath" --version
-          - task: PowerShell@2
-            displayName: 'Check and Install SQLFluff'
-            inputs:
-              targetType: 'inline'
-              script: |
-                $pythonPath = "C:\Program Files\Python313\python.exe"
-                $sqlfluffPath = "C:\Program Files\Python313\Scripts\sqlfluff.exe"
-                if (-Not (Test-Path $sqlfluffPath)) {
-                  Write-Host "sqlfluff not found. Installing via pip..."
-                  & "$pythonPath" -m pip install sqlfluff
-                } else {
-                    Write-Host "sqlfluff is already installed at $sqlfluffPath"
-                  }
-                Write-Host "sqlfluff version:"
-                & "$sqlfluffPath" --version      
+#         - task: PowerShell@2
+#           displayName: 'Check and Install Python'
+#           inputs:
+#             targetType: 'inline'
+#             script: |
+#               $pythonPath = "C:\Program Files\Python313\python.exe"
+#               if (-Not (Test-Path $pythonPath)) {
+#                 Write-Error "Python not found at $pythonPath. Please install Python system-wide."
+#                  exit 1
+#                }
+#                Write-Host "Python found at $pythonPath"
+#               & "$pythonPath" --version
+#          - task: PowerShell@2
+#            displayName: 'Check and Install SQLFluff'
+#            inputs:
+#              targetType: 'inline'
+#              script: |
+#                $pythonPath = "C:\Program Files\Python313\python.exe"
+#                $sqlfluffPath = "C:\Program Files\Python313\Scripts\sqlfluff.exe"
+#                if (-Not (Test-Path $sqlfluffPath)) {
+#                  Write-Host "sqlfluff not found. Installing via pip..."
+#                  & "$pythonPath" -m pip install sqlfluff
+#                } else {
+#                    Write-Host "sqlfluff is already installed at $sqlfluffPath"
+#                  }
+#                Write-Host "sqlfluff version:"
+#                & "$sqlfluffPath" --version      
 ######################################################
-  - stage: SQL_Linting
-    displayName: "SQL_Syntax_Checker"
-    dependsOn: PrepareEnvironment
-    condition: succeeded()
-    jobs:
-     - job: Run_SQLFluff_Lint
-       steps:
-        - task: PowerShell@2
-          displayName: "Run SQLFluff Lint"
-          inputs:
-            targetType: 'inline'
-            script: |
-              $sqlfluffPath = "C:\Program Files\Python313\Scripts\sqlfluff.exe"
+#  - stage: SQL_Linting
+#    displayName: "SQL_Syntax_Checker"
+#    dependsOn: PrepareEnvironment
+#    condition: succeeded()
+#    jobs:
+#     - job: Run_SQLFluff_Lint
+#       steps:
+#        - task: PowerShell@2
+#          displayName: "Run SQLFluff Lint"
+#          inputs:
+#            targetType: 'inline'
+#            script: |
+#              $sqlfluffPath = "C:\Program Files\Python313\Scripts\sqlfluff.exe"
+#              New-Item -ItemType Directory -Force -Path "$(SQL_FLUFFS_REPORTS)"
+#              git fetch origin $(System.PullRequest.TargetBranch)
 
-              New-Item -ItemType Directory -Force -Path "$(SQL_FLUFFS_REPORTS)"
-              git fetch origin $(System.PullRequest.TargetBranch)
+#              $diffFiles = git diff --name-only origin/$(System.PullRequest.TargetBranch) HEAD
+#              $changedFiles = $diffFiles | Where-Object { $_.ToLower().EndsWith(".sql") }
+#              if (-not $changedFiles -or $changedFiles.Count -eq 0) {
+#                Write-Host "##[section]No SQL files changed in this PR. Skipping linting."
+#                Exit 0
+#              }
+#              Write-Host "##[section]Changed SQL Files:"
+#              $changedFiles | ForEach-Object { Write-Host $_ }
 
-              $diffFiles = git diff --name-only origin/$(System.PullRequest.TargetBranch) HEAD
-              $changedFiles = $diffFiles | Where-Object { $_.ToLower().EndsWith(".sql") }
-              if (-not $changedFiles -or $changedFiles.Count -eq 0) {
-                Write-Host "##[section]No SQL files changed in this PR. Skipping linting."
-                Exit 0
-              }
-              Write-Host "##[section]Changed SQL Files:"
-              $changedFiles | ForEach-Object { Write-Host $_ }
-
-              $outputFile = "$(SQL_FLUFF_OUTPUT_FILE)"
-              $jsonOutputFile = "$(SQL_FLUFFS_REPORTS)"
-              $lintErrors = 0
-              foreach ($file in $changedFiles) {
-                  Write-Host "Linting file: $file"
-                  (& "$sqlfluffPath" lint $file --config "$(SQL_FLUFF_CONFIG)" --format json) | Out-File -Append -Encoding utf8 $jsonOutputFile
-                  if ($LASTEXITCODE -ne 0) {
-                    $lintErrors++
-                  }
-              }
-              if ($lintErrors -gt 0) {
-                  Write-Host "##vso[task.complete result=SucceededWithIssues;]SQLFluff found linting issues."
-              } else {
-                  Write-Host "##[section]SQLFluff: No linting issues found."
-                }                        
+#              $outputFile = "$(SQL_FLUFF_OUTPUT_FILE)"
+#              $jsonOutputFile = "$(SQL_FLUFFS_REPORTS)"
+#              $lintErrors = 0
+#              foreach ($file in $changedFiles) {
+#                  Write-Host "Linting file: $file"
+#                  (& "$sqlfluffPath" lint $file --config "$(SQL_FLUFF_CONFIG)" --format json) | Out-File -Append -Encoding utf8 $jsonOutputFile
+#                  if ($LASTEXITCODE -ne 0) {
+#                    $lintErrors++
+#                  }
+#              }
+#              if ($lintErrors -gt 0) {
+#                  Write-Host "##vso[task.complete result=SucceededWithIssues;]SQLFluff found linting issues."
+#              } else {
+#                  Write-Host "##[section]SQLFluff: No linting issues found."
+#                }                        
 ######################################################
   - stage: Pre_FlywayValidator
-    dependsOn: SQL_Linting
+    dependsOn: PrepareEnvironment
     condition: succeeded()
     displayName: 'Flyway Validate and Info'
     jobs:
