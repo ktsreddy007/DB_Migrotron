@@ -16,12 +16,5 @@ DevOps Engineer | Cloud Enthusiast
   <img src="Database/images/Flyway(CICD).png" alt="flywaycicd"/><br/>
 </p>
 
-<table>
-    <td>
-      <a href="https://drive.google.com/file/d/1YMwuOHT76ThVkOPkw5AjOafuRJ6EcpBG/view?usp=sharing" target="_blank">
-        ▶️ Watch the Demo Video
-      </a>
-    </td>
-</table>
 
 ---
