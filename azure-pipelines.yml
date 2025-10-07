@@ -191,14 +191,7 @@ stages:
               $lintErrors = 0
               foreach ($file in $changedFiles) {
                   Write-Host "Linting file: $file"
-                  & "$sqlfluffPath" lint $file `
-                    --config "$(SQL_FLUFF_CONFIG)" `
-                    --format json `
-                    | Out-File -Append -Encoding utf8 $jsonOutputFile
-                  & "$sqlfluffPath" lint $file `
-                    --config "$(SQL_FLUFF_CONFIG)" `
-                    --format json `
-                    | Out-File -Append -Encoding utf8 $jsonOutputFile
+                  (& "$sqlfluffPath" lint $file --config "$(SQL_FLUFF_CONFIG)" --format json) | Out-File -Append -Encoding utf8 $jsonOutputFile
                   if ($LASTEXITCODE -ne 0) {
                     $lintErrors++
                   }
