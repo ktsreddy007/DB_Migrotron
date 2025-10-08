@@ -1,0 +1,21 @@
+[sqlfluff]
+dialect = tsql
+templater = raw  
+exclude_rules = L009,L031
+max_line_length = 120
+
+[sqlfluff:indentation]
+indent_unit = space
+tab_space_size = 4
+
+[sqlfluff:rules:L010]
+capitalisation_policy = upper
+
+[sqlfluff:rules:L014]
+capitalisation_policy = consistent
+
+[sqlfluff:rules:L036]
+forbid = true
+
+[sqlfluff:rules:L040]
+enabled = true
