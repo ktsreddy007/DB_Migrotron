@@ -26,7 +26,6 @@ variables:
 
 stages:
   - stage: CaptureRollbackScripts
-    
     displayName: 'Capture Rollback Scripts and Insert into Mapper Table'
     jobs:
       - job: RollbackScripts_Recorder
@@ -184,7 +183,9 @@ stages:
               Write-Host "##[section]Changed SQL Files:"
               $changedFiles | ForEach-Object { Write-Host $_ }
               $outputFile = "$(SQL_FLUFF_OUTPUT_FILE)"
-              $jsonOutputFile = "$(SQL_FLUFFS_REPORTS)"
+              $jsonOutputFile = "$(SQL_FLUFF_OUTPUT_FILE)"
+              $reportDir = Split-Path $jsonOutputFile -Parent
+              New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
               $lintErrors = 0
               foreach ($file in $changedFiles) {
                   Write-Host "Linting file: $file"
@@ -200,7 +201,7 @@ stages:
                 }                        
 ######################################################
   - stage: Pre_FlywayValidator
-    dependsOn: PrepareEnvironment
+    dependsOn: SQL_Linting
     condition: succeeded()
     displayName: 'Flyway Validate and Info'
     jobs:
@@ -258,7 +259,7 @@ stages:
 ###############################################################                            
   - stage: Premigration_SQLLogger
     displayName: "Pre_SQL_Logger"
-    dependsOn: Pre_FlywayValidator
+    dependsOn: Pre_FlywayValidator 
     condition: succeeded()
     jobs:
      - job: PreSQL_Logger
