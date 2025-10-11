@@ -201,7 +201,8 @@ stages:
                   Write-Host "##vso[task.complete result=SucceededWithIssues;]SQLFluff found linting issues."
               } else {
                   Write-Host "##[section]SQLFluff: No linting issues found."
-                }                        
+                }
+              exit 0                          
 ######################################################
   - stage: Pre_FlywayValidator
     dependsOn: SQL_Linting
