@@ -405,60 +405,59 @@ stages:
     condition: succeeded()
     displayName: 'Migrating the Scripts'
     jobs:
-      - job: FlywayMigrate
-        steps:
-          - task: PowerShell@2
-            displayName: 'Run Flyway Migrate'
-            inputs:
-              targetType: 'inline'
-              script: |
-               Write-Host "Connecting to DB server: $(DB_SERVER), Database: $(DB_NAME)"
-               [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
-
-               $dbUser = $env:dbUser
-               $dbPassword = $env:dbPassword
-               
-               $env:FLYWAY_USER = $dbUser
-               $env:FLYWAY_PASSWORD = $dbPassword
-
-               $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$dbUser;Password=$dbPassword;"
-               $connection = New-Object System.Data.SqlClient.SqlConnection
-               $connection.ConnectionString = $connectionString
-               $connection.Open()
-               Write-Host "DB connection opened."
-
-               $tableName = "flyway_schema_history"
-               $sqlQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '$tableName'"
-               $command = $connection.CreateCommand()
-               $command.CommandText = $sqlQuery
-               $tableCount = $command.ExecuteScalar()
-               Write-Host "Table count result: $tableCount"    
-
-               if ($tableCount -eq 0) {
-                  Write-Host "Table '$tableName' does not exist."
-                  Write-Host "Running flyway baseline before migrate with baselineVersion=0..."
-                  & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" baseline -baselineVersion=0
-                  if ($LASTEXITCODE -ne 0) {
-                    Write-Error "Flyway baseline failed."
-                    $connection.Close()
-                    exit 1
-                  }
-                }
-                else {
-                  Write-Host "Table '$tableName' exists."
-                }
-               Write-Host "Flyway migrate triggered on merge/push to main branch."
-               & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" migrate
-               if ($LASTEXITCODE -ne 0) {
-                  Write-Error "Flyway migrate failed."
-                  $connection.Close()
-                  exit 1
-                }
-               Write-Host "Flyway migrate completed successfully."
-               $connection.Close()
-            env:
-              dbUser: $(dbUser_1)
-              dbPassword: $(dbPassword)
+      - deployment: FlywayMigrate
+        environment: Go_Flyway
+        strategy:
+          runOnce:
+            deploy: 
+              steps:
+                - task: PowerShell@2
+                  displayName: 'Flyway Migrate'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "Connecting to DB server: $(DB_SERVER), Database: $(DB_NAME)"
+                      [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
+                      $dbUser = $env:dbUser
+                      $dbPassword = $env:dbPassword
+                      $env:FLYWAY_USER = $dbUser
+                      $env:FLYWAY_PASSWORD = $dbPassword
+                      $connectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$dbUser;Password=$dbPassword;"
+                      $connection = New-Object System.Data.SqlClient.SqlConnection
+                      $connection.ConnectionString = $connectionString
+                      $connection.Open()
+                      Write-Host "DB connection opened."
+                      $tableName = "flyway_schema_history"
+                      $sqlQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '$tableName'"
+                      $command = $connection.CreateCommand()
+                      $command.CommandText = $sqlQuery
+                      $tableCount = $command.ExecuteScalar()
+                      Write-Host "Table count result: $tableCount"    
+                      if ($tableCount -eq 0) {
+                          Write-Host "Table '$tableName' does not exist."
+                          Write-Host "Running flyway baseline before migrate with baselineVersion=0..."
+                          & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" baseline -baselineVersion=0
+                          if ($LASTEXITCODE -ne 0) {
+                            Write-Error "Flyway baseline failed."
+                            $connection.Close()
+                            exit 1
+                          }
+                      }
+                      else {
+                        Write-Host "Table '$tableName' exists."
+                      }
+                      Write-Host "Flyway migrate triggered on merge/push to main branch."
+                      & flyway -configFiles="$(FLYWAY_CONFIG_PATH)" migrate
+                      if ($LASTEXITCODE -ne 0) {
+                          Write-Error "Flyway migrate failed."
+                          $connection.Close()
+                          exit 1
+                      }
+                      Write-Host "Flyway migrate completed successfully."
+                      $connection.Close()
+                  env:
+                    dbUser: $(dbUser_1)
+                    dbPassword: $(dbPassword)
 ###################################################################
   - stage: Postmigration_SQLLogger
     displayName: "Post_SQL_Logger"
