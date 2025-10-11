@@ -1,10 +1,10 @@
 -- Create the 'NB_users' table
 IF NOT EXISTS (
     SELECT * FROM INFORMATION_SCHEMA.TABLES
-    WHERE TABLE_NAME = 'Payroll.dbo.NB_users' AND TABLE_SCHEMA = 'dbo'
+    WHERE TABLE_NAME = 'Payroll.dbo.UB_users' AND TABLE_SCHEMA = 'dbo'
 )
 BEGIN
-CREATE TABLE Payroll.dbo.NB_users (
+CREATE TABLE Payroll.dbo.UB_users (
     Id INT IDENTITY(1,1) PRIMARY KEY,
     Username NVARCHAR(100) NOT NULL,
     Email NVARCHAR(255) NOT NULL,
