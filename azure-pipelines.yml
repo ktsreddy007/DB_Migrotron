@@ -281,7 +281,9 @@ stages:
                 $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
                 $prId = "$(System.PullRequest.PullRequestId)"
                 $sourceBranch = "$(System.PullRequest.SourceBranch)"
+                Write-Host "SourceBranch: $sourceBranch"
                 $sourceBranchName = $sourceBranch -replace 'refs/heads/', ''
+                Write-Host "SourceBranchName: $sourceBranchName"
                 git fetch origin
                 $changedFilesRaw = git diff --diff-filter=AMCR --name-only origin/main origin/$sourceBranchName
                 $changedFiles = $changedFilesRaw -split "`n" | Where-Object { $_ -like "*.sql" }
@@ -295,7 +297,7 @@ stages:
                             Write-Host "Processing file: $fullPath"
                             Add-Content -Path $logFile -Value "Processed migration script: $file"
                             $matches = Get-Content $fullPath |
-                            Select-String -Pattern "(?i)(create\s+table|insert\s+into)\s+((\[[^\]]+\]|\w+)\.)*((\[[^\]]+\]|\w+))" -AllMatches
+                            Select-String -Pattern "(?i)(create\s+table|insert\s+into|alter\s+table)\s+((\[[^\]]+\]|\w+)\.)*((\[[^\]]+\]|\w+))" -AllMatches
                             foreach ($matchInfo in $matches) {
                                   foreach ($match in $matchInfo.Matches) {
                                       $fullMatch = $match.Value  
