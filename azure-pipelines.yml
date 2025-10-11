@@ -175,24 +175,27 @@ stages:
               New-Item -ItemType Directory -Force -Path "$(SQL_FLUFFS_REPORTS)"
               git fetch origin $(System.PullRequest.TargetBranch)
               $diffFiles = git diff --name-only origin/$(System.PullRequest.TargetBranch) HEAD
-              $changedFiles = $diffFiles | Where-Object { $_.ToLower().EndsWith(".sql") }
-              if (-not $changedFiles -or $changedFiles.Count -eq 0) {
+              $changedFiles = @($diffFiles | Where-Object { $_.ToLower().EndsWith(".sql") })
+              if ($changedFiles.Count -eq 0) {
                 Write-Host "##[section]No SQL files changed in this PR. Skipping linting."
                 Exit 0
-              }
+              } 
               Write-Host "##[section]Changed SQL Files:"
               $changedFiles | ForEach-Object { Write-Host $_ }
-              $outputFile = "$(SQL_FLUFF_OUTPUT_FILE)"
               $jsonOutputFile = "$(SQL_FLUFF_OUTPUT_FILE)"
               $reportDir = Split-Path $jsonOutputFile -Parent
               New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
               $lintErrors = 0
               foreach ($file in $changedFiles) {
-                  Write-Host "Linting file: $file"
-                  (& "$sqlfluffPath" lint $file --config "$(SQL_FLUFF_CONFIG)" --format json) | Out-File -Append -Encoding utf8 $jsonOutputFile
-                  if ($LASTEXITCODE -ne 0) {
+                if (-Not (Test-Path $file)) {
+                  Write-Host "Skipping non-existent file: $file"
+                  continue
+                }
+                Write-Host "Linting file: $file"
+                & "$sqlfluffPath" lint $file --config "$(SQL_FLUFF_CONFIG)" --format json | Out-File -Append -Encoding utf8 $jsonOutputFile
+                if ($LASTEXITCODE -ne 0) {
                     $lintErrors++
-                  }
+                }
               }
               if ($lintErrors -gt 0) {
                   Write-Host "##vso[task.complete result=SucceededWithIssues;]SQLFluff found linting issues."
