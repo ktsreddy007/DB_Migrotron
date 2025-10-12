@@ -1,7 +1,7 @@
--- Create the 'NB_users' table
+-- Create the 'tcl_users' table
 IF NOT EXISTS (
     SELECT * FROM INFORMATION_SCHEMA.TABLES
-    WHERE TABLE_NAME = 'Payroll.dbo.UB_users' AND TABLE_SCHEMA = 'dbo'
+    WHERE TABLE_NAME = 'Payroll.dbo.tcl_users' AND TABLE_SCHEMA = 'dbo'
 )
 BEGIN
 CREATE TABLE Payroll.dbo.UB_users (
