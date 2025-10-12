@@ -1,5 +1,5 @@
 -- This inserts data
-INSERT INTO Payroll.dbo.UB_users (Username, Email, Status)
+INSERT INTO Payroll.dbo.tcl_users (Username, Email, Status)
 VALUES 
 ('sanju', 'ldjdj@example.com','active'),
 ('balcj', 'fyfr@example.com','active'),
