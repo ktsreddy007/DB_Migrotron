@@ -1,16 +1,16 @@
-trigger:
-  branches:
-    include:
-      - main
+#trigger:
+#  branches:
+#    include:
+#      - main
 
 pr:
   branches:
     include:
      - main
-  paths:
-    include:
-      - Database/MSSQL_Server/Dev/migrations/**
-      - Database/MSSQL_Server/Dev/rollback_sql/**
+#  paths:
+#    include:
+#      - Database/MSSQL_Server/Dev/migrations/**
+#      - Database/MSSQL_Server/Dev/rollback_sql/**
       
 pool:
   name: Self-Hosted   
