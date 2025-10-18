@@ -3,10 +3,14 @@ trigger: none
 #    include:
 #      - main
 
-pr: 
+pr: none
 #  branches:
 #    include:
 #     - main
+#   paths:
+#    include:
+#      - Database/MSSQL_Server/Dev/migrations/**
+#      - Database/MSSQL_Server/Dev/rollback_sql/**
       
 pool:
   name: Self-Hosted   
