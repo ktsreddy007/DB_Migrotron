@@ -1,0 +1,8 @@
+steps:
+- checkout: self
+  persistCredentials: true
+  sparseCheckout:
+    paths:
+      - Database/MSSQL_Server/Dev/
+      - Database/MSSQL_Server/templates/
+            

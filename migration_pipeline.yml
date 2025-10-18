@@ -1,16 +1,16 @@
-trigger: none 
-#  branches:
-#    include:
-#      - main
+trigger:
+  branches:
+    include:
+      - main
 
-pr: none
-#  branches:
-#    include:
-#     - main
-#   paths:
-#    include:
-#      - Database/MSSQL_Server/Dev/migrations/**
-#      - Database/MSSQL_Server/Dev/rollback_sql/**
+pr: 
+  branches:
+    include:
+     - main
+  paths:
+    include:
+      - Database/MSSQL_Server/Dev/migrations/**
+      - Database/MSSQL_Server/Dev/rollback_sql/**
       
 pool:
   name: Self-Hosted   
@@ -34,9 +34,8 @@ stages:
     jobs:
       - job: RollbackScripts_Recorder
         steps:
-          - checkout: self
-            persistCredentials: true
-            fetchDepth: 0
+          - checkout: none
+          - template: Database/templates/checkout-sparse.yml  
           - task: PowerShell@2
             displayName: 'File Capture and Insertor'
             inputs:
@@ -170,6 +169,8 @@ stages:
     jobs:
      - job: Run_SQLFluff_Lint
        steps:
+        - checkout: none
+        - template: Database/templates/checkout-sparse.yml 
         - task: PowerShell@2
           displayName: "Run SQLFluff Lint"
           inputs:
@@ -215,6 +216,8 @@ stages:
     jobs:
       - job: ValidateFlyway
         steps:
+          - checkout: none
+          - template: Database/templates/checkout-sparse.yml 
           - task: PowerShell@2
             displayName: 'Conditional Flyway Validate (skip on fresh DB)'
             inputs:
@@ -272,7 +275,8 @@ stages:
     jobs:
      - job: PreSQL_Logger
        steps:
-          - checkout: self
+          - checkout: none
+          - template: Database/templates/checkout-sparse.yml 
             persistCredentials: true
             fetchDepth: 0
           - task: PowerShell@2
@@ -376,6 +380,8 @@ stages:
     jobs:
       - job: RollbackCheck
         steps:
+          - checkout: none
+          - template: Database/templates/checkout-sparse.yml 
           - task: PowerShell@2
             displayName: 'Check if Rollback Script Exists for this PR'
             inputs:
@@ -421,6 +427,8 @@ stages:
           runOnce:
             deploy: 
               steps:
+                - checkout: none
+                - template: Database/templates/checkout-sparse.yml
                 - task: PowerShell@2
                   displayName: 'Flyway Migrate'
                   inputs:
@@ -526,6 +534,8 @@ stages:
     jobs:
      - job: Updating_Mapper_Table
        steps:
+        - checkout: none
+        - template: Database/templates/checkout-sparse.yml
         - task: PowerShell@2
           displayName: 'Update Migration Version and Script in Mapper Table'
           inputs:
@@ -598,6 +608,8 @@ stages:
     jobs:
       - job: PostFlyway_Validator
         steps:
+          - checkout: none
+          - template: Database/templates/checkout-sparse.yml
           - task: PowerShell@2
             displayName: 'Flyway Validate (Post Migration Consistency Check)'
             inputs:

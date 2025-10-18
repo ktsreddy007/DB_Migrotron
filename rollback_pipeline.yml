@@ -1,15 +1,25 @@
-trigger: none 
-#  branches:
-#    include:
-#      - main
-
-pr: none
-#  branches:
-#    include:
-#     - main
-#   paths:
-#    include:
-#      - Database/MSSQL_Server/Dev/rollback_sql/**
+trigger:
+  branches:
+    include:
+      - main
+pr:
+  branches:
+    include:
+     - main
+  paths:
+    include:
+      - Database/MSSQL_Server/Dev/rollback_sql/**
       
 pool:
   name: Self-Hosted   
+
+stages:
+  - stage: SampleTest
+    displayName: "Test Rollback Stage"
+    jobs:
+      - job: TestJob
+        displayName: "Dummy Rollback Job"
+        steps:
+          - script: echo "🚀 This is a test stage in the rollback pipeline"
+          - script: echo "✅ Rollback pipeline is set up correctly!"
+
