@@ -1,15 +1,15 @@
-trigger: none 
-#  branches:
-#    include:
-#      - main
+trigger: 
+  branches:
+    include:
+      - main
 
-pr: none
-#  branches:
-#    include:
-#     - main
-#   paths:
-#    include:
-#      - Database/MSSQL_Server/Dev/rollback_sql/**
+pr:
+  branches:
+    include:
+     - main
+  paths:
+    include:
+      - Database/MSSQL_Server/Dev/rollback_sql/**
       
 pool:
   name: Self-Hosted   

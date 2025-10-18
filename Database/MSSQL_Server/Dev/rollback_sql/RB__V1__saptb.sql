@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS Payroll.dbo.sap_force;
