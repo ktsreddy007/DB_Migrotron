@@ -413,14 +413,15 @@ stages:
   - stage: Flyway_Migration
     dependsOn: Rollback_Finder
     condition: succeeded()
-    displayName: 'Migrating the Scripts'
+    displayName: 'Migrating the Scripts'    
+#      - deployment: FlywayMigrate
+#        environment: Go_Flyway
+#        strategy:
+#          runOnce:
+#            deploy: 
     jobs:
-      - deployment: FlywayMigrate
-        environment: Go_Flyway
-        strategy:
-          runOnce:
-            deploy: 
-              steps:
+      job: FlywayMigrate 
+      steps:
                 - task: PowerShell@2
                   displayName: 'Flyway Migrate'
                   inputs:
