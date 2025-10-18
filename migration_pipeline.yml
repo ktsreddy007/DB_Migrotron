@@ -414,19 +414,14 @@ stages:
     dependsOn: Rollback_Finder
     condition: succeeded()
     displayName: 'Migrating the Scripts'    
-#      - deployment: FlywayMigrate
-#        environment: Go_Flyway
-#        strategy:
-#          runOnce:
-#            deploy: 
     jobs:
-      job: FlywayMigrate 
-      steps:
-                - task: PowerShell@2
-                  displayName: 'Flyway Migrate'
-                  inputs:
-                    targetType: 'inline'
-                    script: |
+        - job: FlywayMigrate 
+          steps:
+            - task: PowerShell@2
+              displayName: 'Flyway Migrate'
+              inputs:
+                  targetType: 'inline'
+                  script: |
                       Write-Host "Connecting to DB server: $(DB_SERVER), Database: $(DB_NAME)"
                       [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
                       $dbUser = $env:dbUser
@@ -466,7 +461,7 @@ stages:
                       }
                       Write-Host "Flyway migrate completed successfully."
                       $connection.Close()
-                  env:
+              env:
                     dbUser: $(dbUser_1)
                     dbPassword: $(dbPassword)
 ###################################################################
