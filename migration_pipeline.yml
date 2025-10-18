@@ -276,9 +276,7 @@ stages:
      - job: PreSQL_Logger
        steps:
           - checkout: none
-          - template: Database/templates/checkout-sparse.yml 
-            persistCredentials: true
-            fetchDepth: 0
+          - template: Database/templates/checkout-sparse.yml
           - task: PowerShell@2
             displayName: 'Pre-Migration Table Record Logger'
             inputs:
