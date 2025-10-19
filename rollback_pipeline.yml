@@ -7,15 +7,67 @@ pr:
   branches:
     include:
      - main
-#  paths:
-#    include:
-#      - Database/MSSQL_Server/Dev/rollback_sql/**
+  paths:
+    include:
+      - Database/MSSQL_Server/Dev/conf/rollback_input.csv
       
 pool:
   name: Self-Hosted
 
-steps:
-  - script: |
-      echo "Running test..."
-      echo "Welcome to Azure Pipelines!"
-    displayName: 'Print Welcome Message'     
+variables:
+  DB_SERVER: 'localhost'
+  DB_NAME: 'Payroll'  
+
+stages:
+- stage: FetchRollbackScripts
+  displayName: 'Fetch Rollback Scripts'
+  jobs:
+    - job: GetScripts
+      steps:
+        - task: PowerShell@2
+          displayName: 'Process CSV Input and Fetch Rollbacks'
+          inputs:
+            targetType: 'inline'
+            script: |
+              $CsvPath = "$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/conf/rollback_input.csv"
+              if (-not (Test-Path $CsvPath)) {
+                Write-Error "CSV file not found: $CsvPath"
+                exit 1
+              }
+              $requests = Import-Csv -Path $CsvPath
+              if ($requests.Count -eq 0) {
+                Write-Error "No rows found in CSV"
+                exit 1
+              }
+              [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
+              $conn = New-Object System.Data.SqlClient.SqlConnection
+              $conn.ConnectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
+              $conn.Open()
+              foreach ($row in $requests) {
+                $pr = $row.PR_ID
+                $version = $row.MigrationVersion
+                if (-not $pr -or -not $version) {
+                  Write-Warning "Skipping row with missing data: PR=$pr, Version=$version"
+                  continue
+                }
+                Write-Host "Fetching rollback for PR: $pr, Version: $version"
+                $cmd = $conn.CreateCommand()
+                $cmd.CommandText = "SELECT rollback_script_name, migration_script FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = @prId AND migration_version = @version ORDER BY rollback_script_name DESC" 
+                $cmd.Parameters.AddWithValue("@prId", $pr) | Out-Null
+                $cmd.Parameters.AddWithValue("@version", $version) | Out-Null
+                $reader = $cmd.ExecuteReader()
+                $found = $false
+                while ($reader.Read()) {
+                  $found = $true
+                  Write-Host "Rollback Script: $($reader["rollback_script_name"])"
+                  Write-Host "Migration Script: $($reader["migration_script"])"
+                }
+                $reader.Close()
+                if (-not $found) {
+                  Write-Warning "No rollback found for PR: $pr, Version: $version"
+                }
+              }
+              $conn.Close()
+          env:
+            dbUser: $(dbUser_1)
+            dbPassword: $(dbPassword)
