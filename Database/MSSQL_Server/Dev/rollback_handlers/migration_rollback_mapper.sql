@@ -1,5 +1,6 @@
 --drop table Payroll.dbo.migration_rollback_mapper;
 --TRUNCATE TABLE Payroll.dbo.migration_rollback_mapper;
+--DBCC CHECKIDENT ('Payroll.dbo.migration_rollback_mapper', RESEED, 5);
 IF NOT EXISTS (
      SELECT * FROM INFORMATION_SCHEMA.TABLES
     WHERE TABLE_NAME = 'Payroll.dbo.migration_rollback_mapper' AND TABLE_SCHEMA = 'dbo'
