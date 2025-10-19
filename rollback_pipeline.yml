@@ -25,6 +25,7 @@ stages:
     - job: GetScripts
       steps:
         - task: PowerShell@2
+          name: FetchScripts
           displayName: 'Process CSV Input and Fetch Rollbacks'
           inputs:
             targetType: 'inline'
@@ -39,10 +40,13 @@ stages:
                 Write-Error "No rows found in CSV"
                 exit 1
               }
+
               [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
               $conn = New-Object System.Data.SqlClient.SqlConnection
               $conn.ConnectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
               $conn.Open()
+
+              $rollbackScripts = @()
               foreach ($row in $requests) {
                 $pr = $row.PR_ID
                 $version = $row.MigrationVersion
@@ -52,22 +56,36 @@ stages:
                 }
                 Write-Host "Fetching rollback for PR: $pr, Version: $version"
                 $cmd = $conn.CreateCommand()
-                $cmd.CommandText = "SELECT rollback_script_name, migration_script FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = @prId AND migration_version = @version ORDER BY rollback_script_name DESC" 
+                $cmd.CommandText = @"
+                  SELECT rollback_script_name, migration_script
+                  FROM Payroll.dbo.migration_rollback_mapper
+                  WHERE pr_id = @prId AND migration_version = @version
+                  ORDER BY rollback_script_name DESC
+                "@
                 $cmd.Parameters.AddWithValue("@prId", $pr) | Out-Null
                 $cmd.Parameters.AddWithValue("@version", $version) | Out-Null
                 $reader = $cmd.ExecuteReader()
-                $found = $false
                 while ($reader.Read()) {
-                  $found = $true
-                  Write-Host "Rollback Script: $($reader["rollback_script_name"])"
-                  Write-Host "Migration Script: $($reader["migration_script"])"
+                  $rollbackScripts += [PSCustomObject]@{
+                    RollbackFile = $reader["rollback_script_name"]
+                    MigrationFile = $reader["migration_script"]
+                  }
                 }
                 $reader.Close()
-                if (-not $found) {
-                  Write-Warning "No rollback found for PR: $pr, Version: $version"
-                }
               }
               $conn.Close()
+
+              if ($rollbackScripts.Count -eq 0) {
+                Write-Error "No rollback scripts found for given inputs."
+                exit 1
+              }
+              $jsonPath = "$(Build.ArtifactStagingDirectory)/rollbackScripts.json"
+              $rollbackScripts | ConvertTo-Json -Depth 3 | Out-File -FilePath $jsonPath -Encoding utf8
+
+              Write-Host "##vso[artifact.upload artifactname=RollbackScriptsArtifact]$(Build.ArtifactStagingDirectory)"
           env:
             dbUser: $(dbUser_1)
             dbPassword: $(dbPassword)
+
+        - publish: $(Build.ArtifactStagingDirectory)
+          artifact: RollbackScriptsArtifact
