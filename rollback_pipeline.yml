@@ -56,12 +56,7 @@ stages:
                 }
                 Write-Host "Fetching rollback for PR: $pr, Version: $version"
                 $cmd = $conn.CreateCommand()
-                $cmd.CommandText = @"
-                  SELECT rollback_script_name, migration_script
-                  FROM Payroll.dbo.migration_rollback_mapper
-                  WHERE pr_id = @prId AND migration_version = @version
-                  ORDER BY rollback_script_name DESC
-                "@
+                $cmd.CommandText = "SELECT rollback_script_name, migration_script FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = @prId AND migration_version = @version ORDER BY rollback_script_name DESC"
                 $cmd.Parameters.AddWithValue("@prId", $pr) | Out-Null
                 $cmd.Parameters.AddWithValue("@version", $version) | Out-Null
                 $reader = $cmd.ExecuteReader()
