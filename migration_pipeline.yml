@@ -1,4 +1,4 @@
-#trigger:
+trigger: none
 #  branches:
 #    include:
 #      - main
@@ -7,10 +7,10 @@ pr:
   branches:
     include:
      - main
-#  paths:
-#    include:
-#      - Database/MSSQL_Server/Dev/migrations/**
-#      - Database/MSSQL_Server/Dev/rollback_sql/**
+  paths:
+    include:
+      - Database/MSSQL_Server/Dev/migrations/**
+      - Database/MSSQL_Server/Dev/rollback_sql/**
       
 pool:
   name: Self-Hosted   
@@ -24,7 +24,7 @@ variables:
   LOG_FOLDER: 'B:/Pre_Post_SQL_Logs'
   LOG_FILE: '$(LOG_FOLDER)/Migration_Logs.txt'
   TABLES_FILE: '$(LOG_FOLDER)/Tables_list.txt'
-  SQL_FLUFF_CONFIG: '$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/.sqlfluff'
+  SQL_FLUFF_CONFIG: '$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/conf/.sqlfluff'
   SQL_FLUFFS_REPORTS: 'B:/SQLFluff_Reports'
   SQL_FLUFF_OUTPUT_FILE: '$(SQL_FLUFFS_REPORTS)/sqlfluff_pr_$(System.PullRequest.PullRequestId).json'
 
