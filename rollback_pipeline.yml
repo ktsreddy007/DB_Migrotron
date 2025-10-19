@@ -12,4 +12,10 @@ pr:
 #      - Database/MSSQL_Server/Dev/rollback_sql/**
       
 pool:
-  name: Self-Hosted   
+  name: Self-Hosted
+
+steps:
+  - script: |
+      echo "Running test..."
+      echo "Welcome to Azure Pipelines!"
+    displayName: 'Print Welcome Message'     
