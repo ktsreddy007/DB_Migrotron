@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS employee_projects;
+DROP TABLE IF EXISTS Payroll.dbo.employee_projects;
