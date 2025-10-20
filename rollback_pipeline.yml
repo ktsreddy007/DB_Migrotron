@@ -83,41 +83,43 @@ stages:
             Write-Error "No rows found in CSV"
             exit 1
           }
-
           [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
           $conn = New-Object System.Data.SqlClient.SqlConnection
           $conn.ConnectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
           $conn.Open()
-
           foreach ($item in $requests) {
             $prId = $item.PR_ID
             $version = $item.MigrationVersion
-            $fallbackScript = if ($null -ne $item.FallbackRollbackScript -and $item.FallbackRollbackScript.Trim() -ne "") { $item.FallbackRollbackScript.Trim() } else { $null }
-
-            if ($fallbackScript) {
-              $rollbackScriptPath = Join-Path -Path "$(Build.SourcesDirectory)" -ChildPath $fallbackScript
+            $fallbackScriptFull = $item.FallbackRollbackScript.Trim()
+            if ($null -ne $fallbackScriptFull -and $fallbackScriptFull -ne "") {
+              $fallbackScript = [System.IO.Path]::GetFileName($fallbackScriptFull)
+              $rollbackScriptPath = Join-Path -Path "$(Build.SourcesDirectory)" -ChildPath $fallbackScriptFull  
               if (Test-Path $rollbackScriptPath) {
                 $cmd = $conn.CreateCommand()
                 $cmd.CommandText = "SELECT COUNT(*) FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = @prId AND migration_version = @version"
                 $cmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
                 $cmd.Parameters.AddWithValue("@version", $version) | Out-Null
                 $exists = $cmd.ExecuteScalar()
-
                 if ($exists -eq 0) {
+                  $majorVersion = $version.Split('.')[0]
+                  $migrationScriptValue = "ad-hoc-V$majorVersion"
                   $insertCmd = $conn.CreateCommand()
-                  $insertCmd.CommandText = "INSERT INTO Payroll.dbo.migration_rollback_mapper (pr_id, migration_version, rollback_script_name, migration_script) VALUES (@prId, @version, @rollbackScript, 'ad-hoc')"
+                  $insertCmd.CommandText = "INSERT INTO Payroll.dbo.migration_rollback_mapper (pr_id, migration_version, rollback_script_name, migration_script, rollback_script_repo_folder, rollback_script_repo_url) VALUES (@prId, @version, @rollbackScript, @migrationScript, @repoFolder, @repoUrl)"
                   $insertCmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
                   $insertCmd.Parameters.AddWithValue("@version", $version) | Out-Null
                   $insertCmd.Parameters.AddWithValue("@rollbackScript", $fallbackScript) | Out-Null
+                  $insertCmd.Parameters.AddWithValue("@migrationScript", $migrationScriptValue) | Out-Null
+                  $insertCmd.Parameters.AddWithValue("@repoFolder", "Database/MSSQL_Server/Dev/rollback_sql") | Out-Null
+                  $insertCmd.Parameters.AddWithValue("@repoUrl", "https://github.com/ktsreddy007/DB_Migrotron") | Out-Null
                   $insertCmd.ExecuteNonQuery()
-                  Write-Host "Inserted new rollback mapping for PR $prId, version $version with fallback rollback script: $fallbackScript"
+                  Write-Host "Inserted new rollback mapping for PR $prId, version $version with fallback rollback script: $fallbackScript and migration_script: $migrationScriptValue"
                 }
-              }
+              }          
               else {
-                Write-Warning "Fallback rollback script file NOT found in repo: $fallbackScript. Skipping insert."
+                Write-Warning "Fallback rollback script file NOT found in repo: $fallbackScriptFull. Skipping insert."
               }
             }
-          }
+          }           
           $conn.Close()
       env:
         dbUser: $(dbUser_1)
@@ -234,18 +236,21 @@ stages:
                   }
                   $content = Get-Content $filePath | Where-Object { $_ -notmatch "^\s*--" -and $_ -ne "" }
                   foreach ($line in $content) {
-                    if ($line -match "(?i)\b(INSERT|UPDATE|DELETE)\b") {
-                      if ($line -match "(?i)\bINTO\s+\[?(\w+)\]?") {
+                    Write-Host "Line: $line"
+                    if ($line -match "(?i)\bINSERT\s+INTO\s+\[?(\w+)\]?") {
+                      Write-Host "Detected INSERT into table: $($matches[1])"
+                      $dmlDeps += $matches[1]
+                    } elseif ($line -match "(?i)\bUPDATE\s+\[?(\w+)\]?") {
+                        Write-Host "Detected UPDATE on table: $($matches[1])"
                         $dmlDeps += $matches[1]
-                      } elseif ($line -match "(?i)\bUPDATE\s+\[?(\w+)\]?") {
-                        $dmlDeps += $matches[1]
-                      } elseif ($line -match "(?i)\bDELETE\s+FROM\s+\[?(\w+)\]?") {
-                        $dmlDeps += $matches[1]
-                      }
+                    } elseif ($line -match "(?i)\bDELETE\s+FROM\s+\[?(\w+)\]?") {
+                          Write-Host "Detected DELETE from table: $($matches[1])"
+                          $dmlDeps += $matches[1]
                     }
-                    if ($line -match "(?i)\b(CREATE|ALTER|DROP)\b") {
-                      if ($line -match "(?i)\bTABLE\s+\[?(\w+)\]?") {
-                        $ddlDeps += $matches[1]
+                    if ($line -match "(?i)(CREATE|ALTER|DROP)\s+TABLE\s+(?:IF EXISTS\s+)?([a-zA-Z0-9_\[\]\.]+)") {
+                      $normalizedName = $matches[2] -replace '\[|\]', ''
+                      Write-Host "Detected DDL on table: $normalizedName"
+                      $ddlDeps += $normalizedName
                       }
                     }
                   }
