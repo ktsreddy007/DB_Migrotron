@@ -124,6 +124,7 @@ stages:
 
 - stage: FetchRollbackScripts
   displayName: 'Fetch Rollback Scripts and Publish Artifact'
+  dependsOn: []
   jobs:
   - job: FetchScripts
     pool:
