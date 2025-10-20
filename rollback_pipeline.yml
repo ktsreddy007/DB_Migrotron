@@ -199,6 +199,7 @@ stages:
 - stage: DependencyChecker
   displayName: 'Check Dependencies'
   dependsOn: FetchRollbackScripts
+  condition: succeeded('FetchRollbackScripts')
   jobs:
     - job: AnalyzeDependencies
       steps:
