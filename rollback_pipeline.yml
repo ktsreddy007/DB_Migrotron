@@ -3,13 +3,13 @@ trigger: none
 #    include:
 #      - main
 
-pr:
-  branches:
-    include:
-     - main
-  paths:
-    include:
-      - Database/MSSQL_Server/Dev/conf/rollback_input.csv
+pr: none
+#  branches:
+#    include:
+#     - main
+#  paths:
+#    include:
+#      - Database/MSSQL_Server/Dev/conf/rollback_input.csv
       
 pool:
   name: Self-Hosted
