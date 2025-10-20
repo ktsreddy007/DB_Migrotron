@@ -1,5 +1,5 @@
 ﻿PR_ID, MigrationVersion, FallbackRollbackScript
-2929591284,1,Database/MSSQL_Server/Dev/rollback_sql/V1.3__RB_insert_departmet_table.sql
+2929591284,1,
 2929591284,2,
 2929591284,3,
 2929591284,4,

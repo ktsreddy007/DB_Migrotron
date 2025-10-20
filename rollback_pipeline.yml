@@ -241,17 +241,16 @@ stages:
                       Write-Host "Detected INSERT into table: $($matches[1])"
                       $dmlDeps += $matches[1]
                     } elseif ($line -match "(?i)\bUPDATE\s+\[?(\w+)\]?") {
-                        Write-Host "Detected UPDATE on table: $($matches[1])"
-                        $dmlDeps += $matches[1]
+                      Write-Host "Detected UPDATE on table: $($matches[1])"
+                      $dmlDeps += $matches[1]
                     } elseif ($line -match "(?i)\bDELETE\s+FROM\s+\[?(\w+)\]?") {
-                          Write-Host "Detected DELETE from table: $($matches[1])"
-                          $dmlDeps += $matches[1]
+                      Write-Host "Detected DELETE from table: $($matches[1])"
+                      $dmlDeps += $matches[1]
                     }
                     if ($line -match "(?i)(CREATE|ALTER|DROP)\s+TABLE\s+(?:IF EXISTS\s+)?([a-zA-Z0-9_\[\]\.]+)") {
                       $normalizedName = $matches[2] -replace '\[|\]', ''
                       Write-Host "Detected DDL on table: $normalizedName"
                       $ddlDeps += $normalizedName
-                      }
                     }
                   }
                 }
@@ -288,4 +287,4 @@ stages:
               $connection.Close()
           env:
             dbUser: $(dbUser_1)
-            dbPassword: $(dbPassword)          
+            dbPassword: $(dbPassword)
