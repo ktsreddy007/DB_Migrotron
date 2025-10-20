@@ -54,7 +54,7 @@ stages:
 - stage: UpdateMapperTable
   displayName: 'Update Mapper Table with Ad-hoc Rollbacks (Conditional)'
   dependsOn: DetectFallbackScripts
-  condition: eq(dependencies.DetectFallbackScripts.outputs['DetectFallbackPresence.FallbackRollbackScriptPresent'], 'true')
+  condition: eq(dependencies.DetectFallbackScripts.outputs['DetectFallback.FallbackRollbackScriptPresent'], 'true')
   jobs:
   - job: UpdateMapper
     pool:
