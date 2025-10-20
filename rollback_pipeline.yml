@@ -19,6 +19,7 @@ variables:
   DB_NAME: 'Payroll'  
 
 stages:
+###################################################################################
 - stage: DetectFallbackScripts
   displayName: 'Detect Fallback Rollback Scripts in CSV'
   jobs:
@@ -56,7 +57,7 @@ stages:
             Write-Host "No fallback rollback scripts found in CSV."
             Write-Host "##vso[task.setvariable variable=FallbackRollbackScriptPresent;isOutput=true]false"
           }
-
+###################################################################################
 - stage: UpdateMapperTable
   displayName: 'Update Mapper Table with Ad-hoc Rollbacks (Conditional)'
   dependsOn: DetectFallbackScripts
@@ -121,10 +122,13 @@ stages:
       env:
         dbUser: $(dbUser_1)
         dbPassword: $(dbPassword)
-
+###################################################################################
 - stage: FetchRollbackScripts
   displayName: 'Fetch Rollback Scripts and Publish Artifact'
-  dependsOn: []
+  condition: or(
+    succeeded('UpdateMapperTable'),
+    eq(dependencies.UpdateMapperTable.result, 'skipped')
+    )
   jobs:
   - job: FetchScripts
     pool:
@@ -191,10 +195,11 @@ stages:
 
     - publish: $(Build.ArtifactStagingDirectory)
       artifact: RollbackScriptsArtifact
-
+###################################################################################
 - stage: DependencyChecker
   displayName: 'Check Dependencies'
   dependsOn: FetchRollbackScripts
+  condition: succeeded('FetchRollbackScripts')
   jobs:
     - job: AnalyzeDependencies
       steps:
