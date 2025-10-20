@@ -37,24 +37,30 @@ stages:
           }
 
           $csv = Import-Csv -Path $CsvPath
+          Write-Host "Imported $($csv.Count) rows from CSV."
           $hasFallback = $false
 
           foreach ($row in $csv) {
+            Write-Host "Checking row with PR_ID: $($row.PR_ID), FallbackRollbackScript: $($row.FallbackRollbackScript)"
             if ($row.FallbackRollbackScript -and $row.FallbackRollbackScript.Trim() -ne "") {
+              Write-Host "Found fallback rollback script in this row."
               $hasFallback = $true
               break
             }
           }
 
           if ($hasFallback) {
+            Write-Host "Fallback rollback scripts detected in CSV."
             Write-Host "##vso[task.setvariable variable=FallbackRollbackScriptPresent;isOutput=true]true"
           } else {
+            Write-Host "No fallback rollback scripts found in CSV."
             Write-Host "##vso[task.setvariable variable=FallbackRollbackScriptPresent;isOutput=true]false"
           }
+
 - stage: UpdateMapperTable
   displayName: 'Update Mapper Table with Ad-hoc Rollbacks (Conditional)'
   dependsOn: DetectFallbackScripts
-  condition: eq(dependencies.DetectFallbackScripts.outputs['DetectFallback.FallbackRollbackScriptPresent'], 'true')
+  condition: eq(dependencies.DetectFallbackScripts.outputs['DetectFallback.DetectFallbackPresence.FallbackRollbackScriptPresent'], 'true') 
   jobs:
   - job: UpdateMapper
     pool:
@@ -98,7 +104,7 @@ stages:
 
                 if ($exists -eq 0) {
                   $insertCmd = $conn.CreateCommand()
-                  $insertCmd.CommandText =$insertCmd.CommandText = "INSERT INTO Payroll.dbo.migration_rollback_mapper (pr_id, migration_version, rollback_script_name, migration_script) VALUES (@prId, @version, @rollbackScript, 'ad-hoc')"
+                  $insertCmd.CommandText = "INSERT INTO Payroll.dbo.migration_rollback_mapper (pr_id, migration_version, rollback_script_name, migration_script) VALUES (@prId, @version, @rollbackScript, 'ad-hoc')"
                   $insertCmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
                   $insertCmd.Parameters.AddWithValue("@version", $version) | Out-Null
                   $insertCmd.Parameters.AddWithValue("@rollbackScript", $fallbackScript) | Out-Null
@@ -115,6 +121,7 @@ stages:
       env:
         dbUser: $(dbUser_1)
         dbPassword: $(dbPassword)
+
 - stage: FetchRollbackScripts
   displayName: 'Fetch Rollback Scripts and Publish Artifact'
   dependsOn: UpdateMapperTable
@@ -183,4 +190,4 @@ stages:
         dbPassword: $(dbPassword)
 
     - publish: $(Build.ArtifactStagingDirectory)
-      artifact: RollbackScriptsArtifact        
+      artifact: RollbackScriptsArtifact
