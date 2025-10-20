@@ -19,10 +19,42 @@ variables:
   DB_NAME: 'Payroll'  
 
 stages:
+- stage: DetectFallbackScripts
+  displayName: 'Detect Fallback Rollback Scripts in CSV'
+  jobs:
+  - job: DetectFallback
+    displayName: 'Detect Fallbacks from CSV'
+    steps:
+    - task: PowerShell@2
+      name: DetectFallbackPresence
+      inputs:
+        targetType: 'inline'
+        script: |
+          $CsvPath = "$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/conf/rollback_input.csv"
+          if (-not (Test-Path $CsvPath)) {
+            Write-Error "CSV file not found: $CsvPath"
+            exit 1
+          }
+
+          $csv = Import-Csv -Path $CsvPath
+          $hasFallback = $false
+
+          foreach ($row in $csv) {
+            if ($row.FallbackRollbackScript -and $row.FallbackRollbackScript.Trim() -ne "") {
+              $hasFallback = $true
+              break
+            }
+          }
+
+          if ($hasFallback) {
+            Write-Host "##vso[task.setvariable variable=FallbackRollbackScriptPresent;isOutput=true]true"
+          } else {
+            Write-Host "##vso[task.setvariable variable=FallbackRollbackScriptPresent;isOutput=true]false"
+          }
 - stage: UpdateMapperTable
   displayName: 'Update Mapper Table with Ad-hoc Rollbacks (Conditional)'
-  condition: |
-    containsValue(variables['FallbackRollbackScriptPresent'], 'true')
+  dependsOn: DetectFallbackScripts
+  condition: eq(dependencies.DetectFallbackScripts.outputs['DetectFallbackPresence.FallbackRollbackScriptPresent'], 'true')
   jobs:
   - job: UpdateMapper
     pool:
