@@ -191,3 +191,91 @@ stages:
 
     - publish: $(Build.ArtifactStagingDirectory)
       artifact: RollbackScriptsArtifact
+
+- stage: DependencyChecker
+  displayName: 'Check Dependencies'
+  dependsOn: FetchRollbackScripts
+  jobs:
+    - job: AnalyzeDependencies
+      steps:
+        - download: current
+          artifact: RollbackScriptsArtifact
+        - task: PowerShell@2
+          displayName: 'Analyze DDL & DML Dependencies'
+          inputs:
+            targetType: 'inline'
+            script: |
+              Write-Host "Analyzing object dependencies for safe rollback..."
+              [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
+              $connection = New-Object System.Data.SqlClient.SqlConnection
+              $connection.ConnectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
+              $connection.Open()
+              $artifactPath = "$(Pipeline.Workspace)/RollbackScriptsArtifact"
+              $jsonFiles = Get-ChildItem -Path $artifactPath -Filter "PR*_MIRO_Mapperdata_*.json"
+              if ($jsonFiles.Count -eq 0) {
+                Write-Error "No rollback JSON files found in artifact path: $artifactPath"
+                exit 1
+              }
+              $ddlDeps = @()
+              $dmlDeps = @()
+              foreach ($jsonFile in $jsonFiles) {
+                $jsonContent = Get-Content -Raw -Path $jsonFile.FullName | ConvertFrom-Json
+                foreach ($scriptObj in $jsonContent) {
+                  $rollbackFile = $scriptObj.RollbackFile
+                  $filePath = "$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/rollback_sql/$rollbackFile"
+                  if (-Not (Test-Path $filePath)) {
+                    Write-Warning "File not found: $filePath"
+                    continue
+                  }
+                  $content = Get-Content $filePath | Where-Object { $_ -notmatch "^\s*--" -and $_ -ne "" }
+                  foreach ($line in $content) {
+                    if ($line -match "(?i)\b(INSERT|UPDATE|DELETE)\b") {
+                      if ($line -match "(?i)\bINTO\s+\[?(\w+)\]?") {
+                        $dmlDeps += $matches[1]
+                      } elseif ($line -match "(?i)\bUPDATE\s+\[?(\w+)\]?") {
+                        $dmlDeps += $matches[1]
+                      } elseif ($line -match "(?i)\bDELETE\s+FROM\s+\[?(\w+)\]?") {
+                        $dmlDeps += $matches[1]
+                      }
+                    }
+                    if ($line -match "(?i)\b(CREATE|ALTER|DROP)\b") {
+                      if ($line -match "(?i)\bTABLE\s+\[?(\w+)\]?") {
+                        $ddlDeps += $matches[1]
+                      }
+                    }
+                  }
+                }
+              }
+              $dmlDeps = $dmlDeps | Sort-Object -Unique
+              $ddlDeps = $ddlDeps | Sort-Object -Unique
+              Write-Host "DML Dependencies Detected: $($dmlDeps -join ', ')"
+              Write-Host "DDL Dependencies Detected: $($ddlDeps -join ', ')"
+              if ($dmlDeps.Count -gt 0) {
+                $depsStr = ($dmlDeps | ForEach-Object { "'$_'" }) -join ","
+                $fkQuery = "SELECT tp.name AS ParentTable, tr.name AS ReferencedTable FROM sys.foreign_keys fk JOIN sys.tables tp ON fk.parent_object_id = tp.object_id JOIN sys.tables tr ON fk.referenced_object_id = tr.object_id WHERE tp.name IN ($depsStr) OR tr.name IN ($depsStr)"
+                $command = $connection.CreateCommand()
+                $command.CommandText = $fkQuery
+                $reader = $command.ExecuteReader()
+                $fkList = @()
+                while ($reader.Read()) {
+                  $fkList += [PSCustomObject]@{
+                    Parent = $reader["ParentTable"]
+                    Child = $reader["ReferencedTable"]
+                  }
+                }
+                $reader.Close()
+                if ($fkList.Count -gt 0) {
+                  Write-Host "DML dependency order (child -> parent) calculated:"
+                  $fkList | ForEach-Object {
+                    Write-Host "$($_.Child) -> $($_.Parent)"
+                  }
+                } else {
+                  Write-Host "No foreign key dependencies found for provided DML tables."
+                }
+              } else {
+                Write-Host "No DML dependencies to analyze."
+              }
+              $connection.Close()
+          env:
+            dbUser: $(dbUser_1)
+            dbPassword: $(dbPassword)          
