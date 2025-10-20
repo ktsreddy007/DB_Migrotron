@@ -1,4 +1,4 @@
-﻿PR_ID, MigrationVersion
-2927715009,1
-2927715009,2
-2927715009,3
+﻿PR_ID, MigrationVersion, FallbackRollbackScript
+2927715009,1,
+2927715009,2,
+2927715009,3,
