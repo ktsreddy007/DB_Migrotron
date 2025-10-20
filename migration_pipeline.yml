@@ -77,10 +77,11 @@ stages:
                       foreach ($scriptPath in $rollbackScripts) {
                           $scriptName = [System.IO.Path]::GetFileName($scriptPath)
                           Write-Host "Processing rollback script: $scriptName"
-                          if ($scriptName -notmatch "^RB__V\d+__.+\.sql$") {
-                              Write-Error "Rollback script '$scriptName' does not follow naming convention 'RB__V<version>__<name>.sql'."
+                          if ($scriptName -notmatch "^V\d+\.\d+__RB_.+\.sql$") {
+                              Write-Error "Rollback script '$scriptName' does not follow naming convention 'V<major>.<minor>__RB_<description>.sql'."
                               exit 1
                           }
+                          $createdAt = [DateTime]::UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fffffff")
                           Write-Host "Inserting rollback script: $scriptName"    
                           $command = $connection.CreateCommand()
                           $command.CommandText = "INSERT INTO Payroll.dbo.migration_rollback_mapper (rollback_script_name, rollback_script_repo_folder, rollback_script_repo_url, build_id, pr_id) VALUES (@scriptName, @repoFolder, @repoUrl, @buildId, @prId)"
@@ -548,11 +549,12 @@ stages:
                     $reader.Close()
                     foreach ($rollbackFile in $rollbackScripts) {
                       $fileName = [System.IO.Path]::GetFileNameWithoutExtension($rollbackFile)
-                      if ($fileName -match "^RB__V(\d+)__(.+)$") 
+                      if ($fileName -match "^V(\d+(?:\.\d+)?)__RB_(.+)$") 
                       {
                         $version = $matches[1]
                         $feature = $matches[2]
-                        $migrationScript = "V$version`__$feature.sql"
+                        $baseVersion = $version.Split('.')[0]
+                        $migrationScript = "V$baseVersion`__$feature.sql"
                         $migrationCmd = $connection.CreateCommand()
                         $migrationCmd.CommandText = "SELECT COUNT(1) FROM flyway_schema_history WHERE success = 1 AND version = @version AND script = @script"
                         $migrationCmd.Parameters.AddWithValue("@version", $version) | Out-Null
@@ -561,18 +563,18 @@ stages:
                         if ($count -gt 0) {
                           $updateCmd = $connection.CreateCommand()
                           $updateCmd.CommandText = "UPDATE Payroll.dbo.migration_rollback_mapper SET migration_version = @version, migration_script = @script WHERE pr_id = @prId AND build_id = @buildId AND rollback_script_name = @rollbackName"                        
-                          $updateCmd.Parameters.AddWithValue("@version", $version) | Out-Null
+                          $updateCmd.Parameters.AddWithValue("@version", $baseVersion) | Out-Null
                           $updateCmd.Parameters.AddWithValue("@script", $migrationScript) | Out-Null
                           $updateCmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
                           $updateCmd.Parameters.AddWithValue("@buildId", $buildId) | Out-Null
                           $updateCmd.Parameters.AddWithValue("@rollbackName", $rollbackFile) | Out-Null
                           $updated = $updateCmd.ExecuteNonQuery()
-                          Write-Host "Updated $updated record(s) for '$rollbackFile' with version '$version'"
+                          Write-Host "Updated $updated record(s) for '$rollbackFile' with migration version '$baseVersion'"
                         } else {
                             Write-Host "No matching migration found for rollback script '$rollbackFile'"
                           }
                       } else {
-                          Write-Host "Rollback script name '$fileName' does not match expected pattern 'RB__V<version>__<feature>.sql'"
+                          Write-Host "Rollback script name '$fileName' does not match expected pattern 'V<version>__RB_<feature>.sql'"
                         }
                     }        
                     $connection.Close()
