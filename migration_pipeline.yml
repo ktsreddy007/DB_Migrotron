@@ -77,8 +77,8 @@ stages:
                       foreach ($scriptPath in $rollbackScripts) {
                           $scriptName = [System.IO.Path]::GetFileName($scriptPath)
                           Write-Host "Processing rollback script: $scriptName"
-                          if ($scriptName -notmatch "^RB__V\d+__.+\.sql$") {
-                              Write-Error "Rollback script '$scriptName' does not follow naming convention 'RB__V<version>__<name>.sql'."
+                          if ($scriptName -notmatch "^V\d+\.\d+__RB_.+\.sql$") {
+                              Write-Error "Rollback script '$scriptName' does not follow naming convention 'V<major>.<minor>__RB_<description>.sql'."
                               exit 1
                           }
                           Write-Host "Inserting rollback script: $scriptName"    
