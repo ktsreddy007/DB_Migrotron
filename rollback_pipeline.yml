@@ -19,151 +19,136 @@ variables:
   DB_NAME: 'Payroll'  
 
 stages:
+- stage: UpdateMapperTable
+  displayName: 'Update Mapper Table with Ad-hoc Rollbacks (Conditional)'
+  condition: |
+    containsValue(variables['FallbackRollbackScriptPresent'], 'true')
+  jobs:
+  - job: UpdateMapper
+    pool:
+      name: Self-Hosted
+    steps:
+    - task: PowerShell@2
+      name: UpdateMapperTable
+      displayName: 'Insert Ad-hoc Rollback Mappings'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $CsvPath = "$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/conf/rollback_input.csv"
+          if (-not (Test-Path $CsvPath)) {
+            Write-Error "CSV file not found: $CsvPath"
+            exit 1
+          }
+          $requests = Import-Csv -Path $CsvPath
+          if ($requests.Count -eq 0) {
+            Write-Error "No rows found in CSV"
+            exit 1
+          }
+
+          [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
+          $conn = New-Object System.Data.SqlClient.SqlConnection
+          $conn.ConnectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
+          $conn.Open()
+
+          foreach ($item in $requests) {
+            $prId = $item.PR_ID
+            $version = $item.MigrationVersion
+            $fallbackScript = if ($null -ne $item.FallbackRollbackScript -and $item.FallbackRollbackScript.Trim() -ne "") { $item.FallbackRollbackScript.Trim() } else { $null }
+
+            if ($fallbackScript) {
+              $rollbackScriptPath = Join-Path -Path "$(Build.SourcesDirectory)" -ChildPath $fallbackScript
+              if (Test-Path $rollbackScriptPath) {
+                $cmd = $conn.CreateCommand()
+                $cmd.CommandText = "SELECT COUNT(*) FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = @prId AND migration_version = @version"
+                $cmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
+                $cmd.Parameters.AddWithValue("@version", $version) | Out-Null
+                $exists = $cmd.ExecuteScalar()
+
+                if ($exists -eq 0) {
+                  $insertCmd = $conn.CreateCommand()
+                  $insertCmd.CommandText =$insertCmd.CommandText = "INSERT INTO Payroll.dbo.migration_rollback_mapper (pr_id, migration_version, rollback_script_name, migration_script) VALUES (@prId, @version, @rollbackScript, 'ad-hoc')"
+                  $insertCmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
+                  $insertCmd.Parameters.AddWithValue("@version", $version) | Out-Null
+                  $insertCmd.Parameters.AddWithValue("@rollbackScript", $fallbackScript) | Out-Null
+                  $insertCmd.ExecuteNonQuery()
+                  Write-Host "Inserted new rollback mapping for PR $prId, version $version with fallback rollback script: $fallbackScript"
+                }
+              }
+              else {
+                Write-Warning "Fallback rollback script file NOT found in repo: $fallbackScript. Skipping insert."
+              }
+            }
+          }
+          $conn.Close()
+      env:
+        dbUser: $(dbUser_1)
+        dbPassword: $(dbPassword)
 - stage: FetchRollbackScripts
-  displayName: 'Fetch Rollback Scripts'
+  displayName: 'Fetch Rollback Scripts and Publish Artifact'
+  dependsOn: UpdateMapperTable
   jobs:
-    - job: GetScripts
-      steps:
-        - task: PowerShell@2
-          name: RB_Script_Capturer
-          displayName: 'Process CSV Input and Fetch Rollbacks'
-          inputs:
-            targetType: 'inline'
-            script: |
-              $CsvPath = "$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/conf/rollback_input.csv"
-              if (-not (Test-Path $CsvPath)) {
-                Write-Error "CSV file not found: $CsvPath"
-                exit 1
-              }
-              $requests = Import-Csv -Path $CsvPath
-              if ($requests.Count -eq 0) {
-                Write-Error "No rows found in CSV"
-                exit 1
-              }
-              [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
-              $conn = New-Object System.Data.SqlClient.SqlConnection
-              $conn.ConnectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
-              $conn.Open()
-              $grouped = $requests | Group-Object PR_ID
-              foreach ($group in $grouped) {
-                $prId = $group.Name
-                $rollbackScripts = @()
-                foreach ($item in $group.Group) {
-                  $version = $item.MigrationVersion
-                  Write-Host "Fetching rollback for PR: $prId, Version: $version"
-                  $cmd = $conn.CreateCommand()
-                  $cmd.CommandText = "SELECT rollback_script_name, migration_script FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = @prId AND migration_version = @version ORDER BY rollback_script_name DESC"
-                  $cmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
-                  $cmd.Parameters.AddWithValue("@version", $version) | Out-Null
-                  $reader = $cmd.ExecuteReader()
-                  while ($reader.Read()) {
-                    $rollbackScripts += [PSCustomObject]@{
-                      RollbackFile = $reader["rollback_script_name"]
-                      MigrationFile = $reader["migration_script"]
-                    }
-                  }
-                  $reader.Close()
-                }
-                if ($rollbackScripts.Count -eq 0) {
-                  Write-Warning "No rollback scripts found for PR: $prId"
-                  continue
-                }
-                $timestamp = Get-Date -Format "yyyyMMddHHmmss"
-                $jsonFileName = "PR${prId}_MIRO_Mapperdata_$timestamp.json"
-                $jsonPath = Join-Path -Path "$(Build.ArtifactStagingDirectory)" -ChildPath $jsonFileName
-                $rollbackScripts | ConvertTo-Json -Depth 3 | Out-File -FilePath $jsonPath -Encoding utf8
-                Write-Host "Created JSON for PR: $prId -> $jsonFileName"
-              }
-              $conn.Close()
-          env:
-            dbUser: $(dbUser_1)
-            dbPassword: $(dbPassword)
-        - publish: $(Build.ArtifactStagingDirectory)
-          artifact: RollbackScriptsArtifact
-- stage: DependencyChecker
-  displayName: 'Check Dependencies'
-  dependsOn: FetchRollbackScripts
-  jobs:
-    - job: AnalyzeDependencies
-      steps:
-        - download: current
-          artifact: RollbackScriptsArtifact
-        - task: PowerShell@2
-          displayName: 'Analyze DDL & DML Dependencies'
-          inputs:
-            targetType: 'inline'
-            script: |
-              Write-Host "Analyzing object dependencies for safe rollback..."
-              [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
-              $connection = New-Object System.Data.SqlClient.SqlConnection
-              $connection.ConnectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
-              $connection.Open()
-              $artifactPath = "$(Pipeline.Workspace)/RollbackScriptsArtifact"
-              $jsonFiles = Get-ChildItem -Path $artifactPath -Filter "PR*_MIRO_Mapperdata_*.json"
-              if ($jsonFiles.Count -eq 0) {
-                Write-Error "No rollback JSON files found in artifact path: $artifactPath"
-                exit 1
-              }
-              $ddlDeps = @()
-              $dmlDeps = @()
-              foreach ($jsonFile in $jsonFiles) {
-                $jsonContent = Get-Content -Raw -Path $jsonFile.FullName | ConvertFrom-Json
-                foreach ($scriptObj in $jsonContent) {
-                  $rollbackFile = $scriptObj.RollbackFile
-                  $filePath = "$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/rollback_sql/$rollbackFile"
-                  if (-Not (Test-Path $filePath)) {
-                    Write-Warning "File not found: $filePath"
-                    continue
-                  }
-                  $content = Get-Content $filePath | Where-Object { $_ -notmatch "^\s*--" -and $_ -ne "" }
-                  foreach ($line in $content) {
-                    if ($line -match "(?i)\b(INSERT|UPDATE|DELETE)\b") {
-                      if ($line -match "(?i)\bINTO\s+\[?(\w+)\]?") {
-                        $dmlDeps += $matches[1]
-                      } elseif ($line -match "(?i)\bUPDATE\s+\[?(\w+)\]?") {
-                        $dmlDeps += $matches[1]
-                      } elseif ($line -match "(?i)\bDELETE\s+FROM\s+\[?(\w+)\]?") {
-                        $dmlDeps += $matches[1]
-                      }
-                    }
-                    if ($line -match "(?i)\b(CREATE|ALTER|DROP)\b") {
-                      if ($line -match "(?i)\bTABLE\s+\[?(\w+)\]?") {
-                        $ddlDeps += $matches[1]
-                      }
-                    }
-                  }
+  - job: FetchScripts
+    pool:
+      name: Self-Hosted
+    steps:
+    - task: PowerShell@2
+      name: FetchRollbackScripts
+      displayName: 'Fetch rollback scripts based on mapper table'
+      inputs:
+        targetType: 'inline'
+        script: |
+          $CsvPath = "$(Build.SourcesDirectory)/Database/MSSQL_Server/Dev/conf/rollback_input.csv"
+          if (-not (Test-Path $CsvPath)) {
+            Write-Error "CSV file not found: $CsvPath"
+            exit 1
+          }
+          $requests = Import-Csv -Path $CsvPath
+          if ($requests.Count -eq 0) {
+            Write-Error "No rows found in CSV"
+            exit 1
+          }
+
+          [System.Reflection.Assembly]::LoadWithPartialName("System.Data.SqlClient") | Out-Null
+          $conn = New-Object System.Data.SqlClient.SqlConnection
+          $conn.ConnectionString = "Server=$(DB_SERVER);Database=$(DB_NAME);User Id=$env:dbUser;Password=$env:dbPassword;"
+          $conn.Open()
+
+          $grouped = $requests | Group-Object PR_ID
+          foreach ($group in $grouped) {
+            $prId = $group.Name
+            $rollbackScripts = @()
+            foreach ($item in $group.Group) {
+              $version = $item.MigrationVersion
+              Write-Host "Fetching rollback for PR: $prId, Version: $version"
+              $cmd = $conn.CreateCommand()
+              $cmd.CommandText = "SELECT rollback_script_name, migration_script FROM Payroll.dbo.migration_rollback_mapper WHERE pr_id = @prId AND migration_version = @version ORDER BY rollback_script_name DESC"
+              $cmd.Parameters.Clear()
+              $cmd.Parameters.AddWithValue("@prId", $prId) | Out-Null
+              $cmd.Parameters.AddWithValue("@version", $version) | Out-Null
+              $reader = $cmd.ExecuteReader()
+              while ($reader.Read()) {
+                $rollbackScripts += [PSCustomObject]@{
+                  RollbackFile = $reader["rollback_script_name"]
+                  MigrationFile = $reader["migration_script"]
                 }
               }
-              $dmlDeps = $dmlDeps | Sort-Object -Unique
-              $ddlDeps = $ddlDeps | Sort-Object -Unique
-              Write-Host "DML Dependencies Detected: $($dmlDeps -join ', ')"
-              Write-Host "DDL Dependencies Detected: $($ddlDeps -join ', ')"
-              if ($dmlDeps.Count -gt 0) {
-                $depsStr = ($dmlDeps | ForEach-Object { "'$_'" }) -join ","
-                $fkQuery = "SELECT tp.name AS ParentTable, tr.name AS ReferencedTable FROM sys.foreign_keys fk JOIN sys.tables tp ON fk.parent_object_id = tp.object_id JOIN sys.tables tr ON fk.referenced_object_id = tr.object_id WHERE tp.name IN ($depsStr) OR tr.name IN ($depsStr)"
-                $command = $connection.CreateCommand()
-                $command.CommandText = $fkQuery
-                $reader = $command.ExecuteReader()
-                $fkList = @()
-                while ($reader.Read()) {
-                  $fkList += [PSCustomObject]@{
-                    Parent = $reader["ParentTable"]
-                    Child = $reader["ReferencedTable"]
-                  }
-                }
-                $reader.Close()
-                if ($fkList.Count -gt 0) {
-                  Write-Host "DML dependency order (child -> parent) calculated:"
-                  $fkList | ForEach-Object {
-                    Write-Host "$($_.Child) -> $($_.Parent)"
-                  }
-                } else {
-                  Write-Host "No foreign key dependencies found for provided DML tables."
-                }
-              } else {
-                Write-Host "No DML dependencies to analyze."
-              }
-              $connection.Close()
-          env:
-            dbUser: $(dbUser_1)
-            dbPassword: $(dbPassword)          
+              $reader.Close()
+            }
+            if ($rollbackScripts.Count -eq 0) {
+              Write-Warning "No rollback scripts found for PR: $prId"
+              continue
+            }
+            $timestamp = Get-Date -Format "yyyyMMddHHmmss"
+            $jsonFileName = "PR${prId}_MIRO_Mapperdata_$timestamp.json"
+            $jsonPath = Join-Path -Path "$(Build.ArtifactStagingDirectory)" -ChildPath $jsonFileName
+            $rollbackScripts | ConvertTo-Json -Depth 3 | Out-File -FilePath $jsonPath -Encoding utf8
+            Write-Host "Created JSON for PR: $prId -> $jsonFileName"
+          }
+
+          $conn.Close()
+      env:
+        dbUser: $(dbUser_1)
+        dbPassword: $(dbPassword)
+
+    - publish: $(Build.ArtifactStagingDirectory)
+      artifact: RollbackScriptsArtifact        
