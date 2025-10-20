@@ -125,7 +125,7 @@ stages:
 - stage: FetchRollbackScripts
   displayName: 'Fetch Rollback Scripts and Publish Artifact'
   dependsOn: UpdateMapperTable
-  condition: or(succeeded(), skipped())
+  condition: succeeded()
   jobs:
   - job: FetchScripts
     pool:
