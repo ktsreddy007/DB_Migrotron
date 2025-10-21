@@ -8,13 +8,18 @@ DevOps Engineer | Cloud Enthusiast
 ---
 ## 🧾 Overview
 
-**DB_Migrotron** is for the POC of Multi DB migration deployemnt via **Flyway Community Verison** that migrates the existing DB Schema & its data updates successfully with custom rollback logics
+**DB_Migrotron** is for the POC of DB migration & rollbacks deployemnt via **Flyway Community Verison** that migrates the Existing & New DB Schema changes & its data (DML & DDL) via flyway versioning files, And rollbacks same via Fix forward approach using **Flyway Community Verison**  
 
 ---
-## Below is the CICD Flow we follow for DB Migration E2E Deployment
+## Below is the CICD Flow we follow for DB Migration Approach E2E Deployment Via Flyway
 <p float="center">
   <img src="Database/images/Flyway(CICD).png" alt="flywaycicd"/><br/>
 </p>
 
+---
+## Below is the CICD Flow we follow for DB Rollback Approach E2E Deployment Via Flyway
+<p float="center">
+  <img src="Database/images/Flyway(Rollback_CICD).png" alt="flywaycicd"/><br/>
+</p>
 
 ---
