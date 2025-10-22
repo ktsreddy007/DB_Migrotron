@@ -13,13 +13,13 @@ DevOps Engineer | Cloud Enthusiast
 ---
 ## Below is the CICD Flow we follow for DB Migration Approach E2E Deployment Via Flyway
 <p float="center">
-  <img src="Database/images/Flyway(Migration_CICD).png" alt="flywaycicd"/><br/>
+  <img src="images/Flyway(Migration_CICD).png" alt="flywaycicd"/><br/>
 </p>
 
 ---
 ## Below is the CICD Flow we follow for DB Rollback Approach E2E Deployment Via Flyway
 <p float="center">
-  <img src="Database/images/Flyway(Rollback_CICD).png" alt="flywaycicd"/><br/>
+  <img src="images/Flyway(Rollback_CICD).png" alt="flywaycicd"/><br/>
 </p>
 
 ---
