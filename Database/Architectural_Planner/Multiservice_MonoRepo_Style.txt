@@ -1,0 +1,93 @@
+Logical DB Separation (Schema Partitioning) — What It Means
+One DB server, but:
+   Each microservice gets its own schema (e.g., user_schema, order_schema, etc.)
+   Services cannot access other schemas (enforced via DB user permissions or convention)
+   Useful in PostgreSQL, Oracle, or any DB that supports multiple schemas
+
+Sample Folder Structure for Schema-Partitioned DB (Mono/single repo Style) 
+
+/project-root
+│
+├── /services
+│   ├── /user-service
+│   │   ├── /src
+│   │   └── /db
+│   │       ├── /schema
+│   │       │   └── user_schema.sql
+│   │       ├── /migrations
+│   │       │   └── V1__create_user_tables.sql
+│   │       └── /seed_data
+│   │           └── seed_users.sql
+│   │
+│   ├── /order-service
+│   │   ├── /src
+│   │   └── /db
+│   │       ├── /schema
+│   │       │   └── order_schema.sql
+│   │       ├── /migrations
+│   │       │   └── V1__create_order_tables.sql
+│   │       └── /seed_data
+│   │           └── seed_orders.sql
+│   │
+│   └── /product-service
+│       ├── /src
+│       └── /db
+│           ├── /schema
+│           │   └── product_schema.sql
+│           ├── /migrations
+│           │   └── V1__create_product_tables.sql
+│           └── /seed_data
+│               └── seed_products.sql
+│
+├── /db-config
+│   ├── /scripts
+│   │   ├── create_schemas.sql
+│   │   └── set_permissions.sql
+│   └── /flyway.conf      # Or liquibase.properties
+│
+└── docker-compose.yml    # Optional: runs app + single DB instance
+
+
+In case of multiple environments with same above Structure in mono repo Style
+
+/project-root
+│
+├── /services
+│   ├── /user-service
+│   │   ├── /src
+│   │   └── /db
+│   │       ├── /dev
+│   │       │   ├── /migrations
+│   │       │   │   └── V1__create_user_table.sql
+│   │       │   ├── /seed_data
+│   │       │   │   └── seed_users.sql
+│   │       │   └── schema.sql
+│   │       ├── /test
+│   │       │   └── ... (same structure)
+│   │       └── /prod
+│   │           └── ... (same structure)
+│   │
+│   ├── /order-service
+│   │   ├── /src
+│   │   └── /db
+│   │       ├── /dev
+│   │       ├── /test
+│   │       └── /prod
+│   │           ├── /migrations
+│   │           └── schema.sql
+│   │
+│   └── /product-service
+│       ├── /src
+│       └── /db
+│           ├── /dev
+│           ├── /test
+│           └── /prod
+│
+├── /shared
+│   ├── /scripts
+│   │   ├── migrate.sh
+│   │   └── seed.sh
+│   └── /libs
+│       └── db-utils.js
+│
+└── docker-compose.yml
