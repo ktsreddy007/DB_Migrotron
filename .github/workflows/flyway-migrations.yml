@@ -1,270 +1,95 @@
-# -----------------------------------------------------------------------------
-# multi-environment Flyway pipeline for Azure SQL
-#
-# Triggers:
-#   • push→main on SQL changes → runs DEV migrations
-#   • workflow_dispatch → manual full run for DEV/QA/DEMO(can select specific services to run manually in required env)
-#
-# Features:
-#   • Initial-bootstrap (first commit on main/dev)
-#   • Diff-based runs (only changed services on DEV)
-#   • Full manual runs (all services on QA/DEMO)
-#   • Skip when no SQL changes
-#   • OIDC→AAD token passwordless auth via azure/login@v2
-#   • Matrix of {service, schema} from schema-config-dev.yml
-#   • Uses Flyway CLI v10.5.13, with placeholder “schemaName”
-# -----------------------------------------------------------------------------
-name: Azure Flyway Migrations
+name: Local Flyway Migrations (DBflyway – SQL Auth)
 
 on:
   push:
-    branches: [  ] #main
+    branches: [ main ]
     paths:
-      - "services/**/sql/**"  # only trigger when any sql/ folder under services/ changes
+      - "services/**/sql/**"
   workflow_dispatch:
-    inputs:
-      environment:
-        description: "Target environment (dev/qa/demo)"
-        required: false
-        default: dev
-        type: choice
-        options:
-          - dev
-          - int
-          - demo
-          - prod
-      runner_group:
-        description: 'Select Runner Group'
-        required: true
-        type: choice
-        options:
-          - non-prod-ghmanaged
-          - dev-eus               #non-prod-dev
-          - cde-non-prod-int
-          - cde-non-prod-demo
-          - cde-prod-eus
-          - plat-devops-prod-eus2
-      services:
-        description: "Optional - Please type Comma-separated list of services to run (default: all)"
-        required: false
-        default: ""
-        type: string
-      schema_config_file:
-        description: "Optional - Please Select Schema Config Yaml file to run for manual trigger in config/ folder"
-        required: false
-        default: "schema-config-dev.yml"
-        type: choice
-        options:
-          - schema-config-dev.yml
-          - schema-config-qa.yml
-          - schema-config-qa-e2e.yml
-          - schema-config-demo.yml
-          - schema-config-demo-mc.yml
-          - schema-config-prod.yml
-      selected_schemas:
-        description: "Optional - Please Select Comma-separated list of schemas to run (default: all)"
-        required: false
-        default: ""
-        type: string
 
 # -------------------------------------------------------------------
-# Global environment variable for target environment
+# Single environment (local only)
 # -------------------------------------------------------------------
 env:
-  ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
-  SCHEMA_CONFIG_FILE: config/${{ github.event.inputs.schema_config_file || 'schema-config-dev.yml' }}
+  ENVIRONMENT: local
 
-# -------------------------------------------------------------------
-# Required permissions for OIDC → Azure
-# -------------------------------------------------------------------
+  # SQL Server (SQL Authentication)
+  DB_HOST: localhost
+  DB_PORT: 1433
+  DB_NAME: YourDatabaseName
+  DB_USER: YourSqlUsername
+  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}   # store securely in GitHub secrets
+
 permissions:
-  id-token: write # for github OIDC -> Azure login
-  contents: read # for checkout
+  contents: read
 
-# =========================================================================
-# JOB: detect-changes
-# Builds a JSON “matrix” of {service, schema} pairs to feed into migrate
-# =========================================================================
 jobs:
-  detect-changes:
-    name: Build service/schema matrix
-    runs-on:
-      group: ${{ github.event.inputs.runner_group || 'non-prod-ghmanaged' }}
-
-    # Pass the selected_schemas input
-    env:
-      INPUT_SELECTED_SCHEMAS: ${{ github.event.inputs.selected_schemas }}
-
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-
-    steps:
-      # step 1: checkout code so we can diff and read schema-config-dev.yml
-      - name: Checkout Code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      # Step 2: Install pip and PyYAML to parse schema-config-dev.yml in Python
-      - name: Install PyYaml
-        run: |
-          sudo apt-get install -y python3-pip
-          pip install pyyaml
-      # Step 3: Determine changed services (or all for bootstrap/manual)
-      - id: set-matrix
-        name: Determine changed services
-        shell: bash
-        run: |
-          set -eo pipefail
-          echo "Event:       $GITHUB_EVENT_NAME"
-          echo "Environment: $ENVIRONMENT"
-          echo "Schema file: $SCHEMA_CONFIG_FILE"
-          echo "Requested services: '${{ github.event.inputs.services }}'"
-          echo "Requested schemas:  '${{ github.event.inputs.selected_schemas }}'"
-          # GitHub uses all-zero SHA for initial push on a new branch
-          BEFORE_SHA=${{ github.event.before }}
-          BASE_SHA="${BEFORE_SHA:-HEAD~1}"
-          # 3.1) Manual run all services
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            if [[ -n "${{ github.event.inputs.services }}" ]]; then
-              echo "Manual run for specified services"
-              CHANGED_SERVICES=$(echo "${{ github.event.inputs.services }}" | tr ',' ' ' | xargs)
-            else
-              echo "Manual run on $ENVIRONMENT (all services)"
-              CHANGED_SERVICES=$(python3 -c "import yaml; cfg=yaml.safe_load(open('$SCHEMA_CONFIG_FILE')); print(' '.join(cfg['services'].keys()))")
-            fi
-            export CHANGED_SERVICES
-          # 3.2) INITIAL BOOTSTRAP on dev: all services
-          elif [[ "$BEFORE_SHA" == "0000000000000000000000000000000000000000" && "$ENVIRONMENT" == "dev" ]]; then
-            echo "Initial bootstrap on dev (all services)"
-            CHANGED_SERVICES=$(python3 -c "import yaml; cfg=yaml.safe_load(open('$SCHEMA_CONFIG_FILE')); print(' '.join(cfg['services'].keys()))")
-            export CHANGED_SERVICES
-          # 3.3) DIFF-BASED RUN on dev: only services with SQL changes
-          else
-            echo "Detecting SQL changes against $BASE_SHA "
-            DIFF=$(git diff --name-only "$BASE_SHA" HEAD | grep 'services/.*/sql/' || true)
-            CHANGED_SERVICES=$(echo "$DIFF" | cut -d'/' -f2 | sort -u)
-            export CHANGED_SERVICES
-            if [[ -z "$CHANGED_SERVICES" ]]; then
-              echo "No SQL changes; skipping migrations."
-              echo 'matrix=[]' >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "Services with SQL changes: $CHANGED_SERVICES"
-          fi
-          # 3.4) Build the JSON matrix
-          python3 -c "
-          import os, yaml, json
-          cfg_file = os.environ.get('SCHEMA_CONFIG_FILE', 'config/schema-config-dev.yml')
-          cfg = yaml.safe_load(open(cfg_file))
-          changed = os.environ.get('CHANGED_SERVICES', '').split()
-          env = os.environ.get('ENVIRONMENT', 'dev')
-          #  INPUT_SELECTED_SCHEMAS from env
-          selected_schemas_raw = os.environ.get('INPUT_SELECTED_SCHEMAS', '')
-          selected_schemas = [s.strip() for s in selected_schemas_raw.split(',')] if selected_schemas_raw else None
-          matrix = []
-          for service, details in cfg['services'].items():
-              if service not in changed:
-                  continue
-              schemas = details.get('schemas', [])
-              use_partitioning = details.get('use_partitioning', False)
-              partitioning = details.get('partitioning', {})
-              partition_vals = partitioning.get(env, '') if use_partitioning else ''
-              reference_schema_1 = details.get('reference_schema_1', "")
-              for schema in schemas:
-                  if selected_schemas and schema not in selected_schemas:
-                      continue
-                  matrix.append({
-                      'service': service,
-                      'schema': schema,
-                      'partitionValues': partition_vals,
-                      'schema2': reference_schema_1
-                  })
-          print('matrix=' + json.dumps(matrix))
-          " >> "$GITHUB_OUTPUT"
-  # =========================================================================
-  # JOB: migrate
-  # Runs Flyway migrate for each {service, schema} in the generated matrix
-  # =========================================================================
   migrate:
-    name: Run Flyway migrations
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.matrix != '[]' }}
+    name: Flyway Migrate (Local MSSQL)
     runs-on:
-      group: ${{ github.event.inputs.runner_group || 'non-prod-ghmanaged' }}
-
-    # Default environment is dev if push
-    environment: ${{ github.event.inputs.environment || 'dev' }}
-
-    # Expand our dynamic matrix of service/schema combos
-    strategy:
-      matrix:
-        include: ${{ fromJson(needs.detect-changes.outputs.matrix) }}
-    env:
-      DB_HOST: ${{ secrets.DB_HOST }}
-      DB_NAME: ${{ secrets.DB_NAME }}
+      - self-hosted
+      - DBflyway
 
     steps:
-      # ---------------------------------------------------------------------
-      # Step 1: Checkout code again for each matrix cell
-      # ---------------------------------------------------------------------
+      # ---------------------------------------------------------------
+      # Step 1: Checkout repository
+      # ---------------------------------------------------------------
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # ---------------------------------------------------------------------
-      # Step 2: Authenticate to Azure via GitHub OIDC
-      # ---------------------------------------------------------------------
-      - name: Azure login Via OIDC
-        uses: azure/login@*********************  # v2.3.0
-        with:
-          client-id: ${{ secrets.UAMA_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          allow-no-subscriptions: true
+      # ---------------------------------------------------------------
+      # Step 2: Ensure Flyway CLI is available
+      # (Skip install if already present on runner)
+      # ---------------------------------------------------------------
+      - name: Install Flyway CLI (if missing)
+        shell: bash
+        run: |
+          if ! command -v flyway &> /dev/null; then
+            echo "Installing Flyway..."
+            curl -L https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/10.13.0/flyway-commandline-10.13.0-linux-x64.tar.gz | tar xz
+            sudo ln -sf "$PWD"/flyway-10.13.0/flyway /usr/local/bin/flyway
+          else
+            echo "Flyway already installed"
+          fi
+          flyway -v
 
-      # ---------------------------------------------------------------------
-      # Step 3: Obtain Azure SQL access token
-      # ---------------------------------------------------------------------
-      - name: Obtain Azure SQL access token
+      # ---------------------------------------------------------------
+      # Step 3: Run Flyway migrations
+      # ---------------------------------------------------------------
+      - name: Run Flyway migrations
+        shell: bash
         run: |
-          az account set --subscription ${{ secrets.APP_SUBSCRIPTION_ID }}
-          ACCESS_TOKEN=$(
-          az account get-access-token \
-            --resource=https://database.windows.net/ \
-            --subscription ${{ secrets.APP_SUBSCRIPTION_ID }} \
-            --query accessToken -o tsv
-          )
-          echo "FLYWAY_JDBC_PROPERTIES_ACCESS_TOKEN=$ACCESS_TOKEN" >> "$GITHUB_ENV"
-      # ---------------------------------------------------------------------
-      # Step 4: Download & install the Flyway CLI
-      # ---------------------------------------------------------------------
-      - name: Install Flyway CLI
-        run: |
-          curl -L https://repo1.maven.org/maven2/org/flywaydb/flyway-commandline/10.13.0/flyway-commandline-10.13.0-linux-x64.tar.gz             | tar xz
-          sudo ln -sf "$PWD"/flyway-10.13.0/flyway /usr/local/bin/flyway
-      # ---------------------------------------------------------------------
-      # Step 5: Write flyway.conf (one property per line)
-      # ---------------------------------------------------------------------
-      - name: Write Flyway config
-        run: |
-          cat <<EOF > flyway.conf
-          flyway.url=jdbc:sqlserver://${{ env.DB_HOST }}:1433;database=${{ env.DB_NAME }};encrypt=true;trustServerCertificate=false;loginTimeout=30
-          flyway.schemas=${{ matrix.schema }}
-          flyway.table=flyway_schema_history
-          flyway.locations=filesystem:services/${{ matrix.service }}/sql
-          flyway.baselineOnMigrate=true
-          flyway.placeholders.schemaName=${{ matrix.schema }}
-          flyway.placeholders.schemaName2=${{ matrix.schema2 }}
-          flyway.placeholders.partitionValues=${{ matrix.partitionValues }}
-          flyway.jdbcProperties.accessToken=$FLYWAY_JDBC_PROPERTIES_ACCESS_TOKEN
-          EOF
-      # ---------------------------------------------------------------------
-      # Step 6: Run Flyway info (to see applied/pending/missing migrations)
-      # ---------------------------------------------------------------------
-      - name: Flyway info ${{ matrix.service }} -> ${{ matrix.schema }}
-        run: flyway -configFiles=flyway.conf info
+          set -e
 
-      # ---------------------------------------------------------------------
-      # Step 7: Run Flyway migrate (all via flyway.conf)
-      # ---------------------------------------------------------------------
-      - name: Flyway migrate ${{ matrix.service }} -> ${{ matrix.schema }}
-        run: flyway migrate
+          echo "Running Flyway using SQL Server Authentication"
+
+          # -----------------------------------------------------------
+          # Define services & schemas
+          # -----------------------------------------------------------
+          SERVICES=("service1" "service2")   # 🔁 change as needed
+          SCHEMAS=("dbo")                    # 🔁 change as needed
+
+          for SERVICE in "${SERVICES[@]}"; do
+            for SCHEMA in "${SCHEMAS[@]}"; do
+
+              echo "-------------------------------------------------"
+              echo "Service: $SERVICE | Schema: $SCHEMA"
+              echo "-------------------------------------------------"
+
+              cat <<EOF > flyway.conf
+              flyway.url=jdbc:sqlserver://${DB_HOST}:${DB_PORT};databaseName=${DB_NAME};encrypt=false;trustServerCertificate=true;loginTimeout=30
+              flyway.user=${DB_USER}
+              flyway.password=${DB_PASSWORD}
+              flyway.schemas=${SCHEMA}
+              flyway.table=flyway_schema_history
+              flyway.locations=filesystem:services/${SERVICE}/sql
+              flyway.baselineOnMigrate=true
+              flyway.validateMigrationNaming=true
+              flyway.placeholders.schemaName=${SCHEMA}
+              EOF
+
+              flyway -configFiles=flyway.conf info
+              flyway -configFiles=flyway.conf migrate
+
+            done
+          done
