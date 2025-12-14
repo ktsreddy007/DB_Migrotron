@@ -93,3 +93,28 @@ jobs:
 
             done
           done
+
+          # ---------------------------------------------------------------------
+      # Step 7: Run Flyway migrate with automatic repair on checksum mismatch
+      # ---------------------------------------------------------------------
+      - name: Flyway migrate ${{ matrix.service }} -> ${{ matrix.schema }}
+        shell: bash
+        run: |
+          set -eo pipefail
+
+          echo "Running Flyway migrate..."
+          if ! flyway -configFiles=flyway.conf migrate; then
+              echo "Flyway migrate failed. Checking for checksum mismatch..."
+
+              # Check for checksum mismatch using validate
+              if flyway -configFiles=flyway.conf validate 2>&1 | grep -q "Migration checksum mismatch"; then
+                  echo "Checksum mismatch detected. Running flyway repair..."
+                  flyway -configFiles=flyway.conf repair
+
+                  echo "Retrying flyway migrate after repair..."
+                  flyway -configFiles=flyway.conf migrate
+              else
+                  echo "Migration failed due to a different error. Exiting."
+                  exit 1
+              fi
+          fi
